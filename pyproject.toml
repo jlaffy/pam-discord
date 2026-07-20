@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pam-discord"
-version = "0.1.0"
+version = "0.2.0"
 description = "A local-first Discord voice inbox for Codex"
 requires-python = ">=3.11"
 dependencies = [
@@ -12,6 +12,9 @@ dependencies = [
   "faster-whisper>=1.1,<2",
   "python-dotenv>=1.0,<2",
 ]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
 
 [project.scripts]
 pam-discord = "pam_discord.bot:main"
@@ -23,3 +26,5 @@ packages = ["src/pam_discord"]
 line-length = 100
 target-version = "py311"
 
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -135,7 +135,7 @@
     <section class="hero wrap" id="top">
       <p class="eyebrow">Local-first voice inbox</p>
       <h1>Speak the work.<br>Keep the record.</h1>
-      <p>Pam connects Discord to your own machine: voice notes become searchable transcripts, Codex tasks, and durable archives—organized by channel and project.</p>
+      <p>Pam connects Discord to your own machine: voice instructions become Codex project work, with the recording, transcript, conversation, and result preserved.</p>
       <div class="actions">
         <a class="button primary" href="#setup">Set up Pam</a>
         <a class="button" href="#how">See the workflow</a>
@@ -151,7 +151,7 @@
         <article><span class="num">01</span><h3>Send</h3><p>Drop a voice note, audio attachment, or text message into an approved Discord channel.</p></article>
         <article><span class="num">02</span><h3>Transcribe</h3><p>faster-whisper runs locally, so speech does not need a separate transcription service.</p></article>
         <article><span class="num">03</span><h3>Work</h3><p>Pam passes the request to the Codex CLI inside the workspace mapped to that channel.</p></article>
-        <article><span class="num">04</span><h3>Archive</h3><p>Audio, transcript, metadata, and output stay together as a durable local record.</p></article>
+        <article><span class="num">04</span><h3>Continue</h3><p>Pam replies in a Discord thread. Voice or text follow-ups resume the same Codex session and archive.</p></article>
       </div>
     </section>
 
@@ -163,7 +163,7 @@
       <div class="projects">
         <div class="card">
           <h3>Your server is the dashboard</h3>
-          <p>Use channels for long-running contexts and Discord threads for focused side conversations.</p>
+          <p>Each channel selects a project. Each thread is one trackable agent conversation with shared context.</p>
         </div>
         <div class="card">
           <h3>Example layout</h3>
@@ -197,7 +197,7 @@ pip install -e .</code></pre>
         <article class="step">
           <div>
             <h3>Create the Discord bot</h3>
-            <p>In the Discord Developer Portal, create an application and bot, enable Message Content Intent, then invite it to your server with permission to view channels, read history, send messages, and download attachments.</p>
+            <p>In the Discord Developer Portal, create an application and bot, enable Message Content Intent, then allow it to view channels, read history, send messages, create public threads, and send messages in threads.</p>
           </div>
         </article>
         <article class="step">
@@ -213,7 +213,7 @@ codex login</code></pre>
         <article class="step">
           <div>
             <h3>Start listening</h3>
-            <p>Launch Pam, send a short test note in an approved channel, and confirm that a transcript and archive entry appear.</p>
+            <p>Launch Pam and send a test note. Pam creates a thread for the transcript, agent work, replies, and follow-ups.</p>
             <pre><code>pam-discord</code></pre>
           </div>
         </article>
@@ -230,4 +230,3 @@ codex login</code></pre>
   </footer>
 </body>
 </html>
-

@@ -25,9 +25,10 @@ When a recording arrives:
 
 1. Pam identifies the project from the Discord channel.
 2. It downloads the recording and transcribes it locally.
-3. It starts a new Codex task in that project's local repository.
-4. Codex reads the project, performs the requested work, and returns a result.
-5. Pam saves the recording, transcript, metadata, prompt, and result, then replies in Discord.
+3. A top-level prompt starts a Discord thread and a matching Codex session.
+4. Codex reads the project, performs the requested work, and replies in the thread.
+5. Voice or text follow-ups in that thread resume the same Codex session.
+6. Pam saves the complete chronological conversation and its underlying files.
 
 There is no scheduled polling and no Codex window left open. Pam waits for Discord events and launches `codex exec` only when work arrives.
 
@@ -40,7 +41,8 @@ Discord reply          <-------        saved archive <- result
 ## What to expect today
 
 - Each mapped Discord channel points to one local project directory.
-- Each recording starts a separate Codex task; follow-up conversation memory is not implemented yet.
+- Each top-level prompt starts a thread; follow-ups in that thread retain Codex context.
+- Both voice recordings and ordinary text messages can prompt or continue work.
 - Codex may read and change files or run commands according to its permissions and the project's instructions.
 - Pam does not automatically create branches, push commits, open PRs, or merge work.
 - Replies appear after transcription and the Codex task finish; long tasks can take time.
@@ -70,7 +72,7 @@ In the [Discord Developer Portal](https://discord.com/developers/applications):
 
 1. Create an application and add a bot.
 2. Enable **Message Content Intent**.
-3. Invite it to your server with **View Channels**, **Read Message History**, **Send Messages**, and **Attach Files** permissions.
+3. Invite it with **View Channels**, **Read Message History**, **Send Messages**, **Create Public Threads**, and **Send Messages in Threads** permissions.
 4. Copy its token. Keep the token private.
 
 ### 3. Configure
@@ -109,24 +111,28 @@ Each channel points to one workspace—the local project directory where Codex w
 pam-discord --config config.toml
 ```
 
-Send a short voice message in a mapped channel. Pam should reply first with the transcript and then with the Codex result.
+Send a short voice message in a mapped channel. Pam creates a thread and replies there with the transcript and Codex result. Add another voice or text message inside the thread to continue the same agent session.
 
 For continuous availability, run Pam as a background service on a machine that stays online.
 
 Your first test should request something harmless, such as: “Read this project's README and summarize it without changing any files.” Confirm the transcript, reply, and archive before allowing editing tasks.
 
-## Record of each instruction
+## Conversation record
 
 ```text
-archive/YYYY/MM/DD/<discord-message-id>/
-├── recording.ogg
-├── metadata.json
-├── transcript.txt
-├── prompt.txt
-└── codex-output.txt
+archive/conversations/<discord-thread-id>/
+├── state.json
+├── conversation.jsonl
+└── messages/<discord-message-id>/
+    ├── recording.ogg
+    ├── metadata.json
+    ├── transcript.txt
+    ├── prompt.txt
+    ├── codex-events.jsonl
+    └── codex-output.txt
 ```
 
-The archive records what was requested, who requested it, which project received it, and what Codex returned. Changes made by Codex remain in that project's workspace and should follow the project's branch and review rules.
+`conversation.jsonl` is the readable chronological record. It connects every author, message, transcript, prompt, reply, Discord link, project, and Codex session. Changes made by Codex remain in that project's workspace and should follow the project's branch and review rules.
 
 ## Current voice support
 
