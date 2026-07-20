@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import argparse
+import atexit
 import asyncio
 import json
 import logging
 import os
 import re
 import subprocess
+import socket
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -40,6 +42,40 @@ def _write_json(path: Path, value: object) -> None:
 def _append_jsonl(path: Path, value: object) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(value, ensure_ascii=False) + "\n")
+
+
+def _append_markdown(path: Path, heading: str, body: str) -> None:
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write(f"## {heading}\n\n{body.strip()}\n\n")
+
+
+def _acquire_instance_lock(path: Path | None) -> None:
+    if path is None:
+        return
+    try:
+        path.mkdir(parents=True, exist_ok=False)
+    except FileExistsError as exc:
+        raise SystemExit(
+            f"Pam already has an instance lock at {path}. "
+            "Stop the other instance, or remove a confirmed stale lock."
+        ) from exc
+    _write_json(
+        path / "owner.json",
+        {
+            "hostname": socket.gethostname(),
+            "pid": os.getpid(),
+            "started_at": datetime.now(UTC).isoformat(),
+        },
+    )
+
+    def release() -> None:
+        try:
+            (path / "owner.json").unlink(missing_ok=True)
+            path.rmdir()
+        except OSError:
+            LOG.warning("could not release instance lock %s", path)
+
+    atexit.register(release)
 
 
 class PamDiscord(discord.Client):
@@ -99,7 +135,30 @@ class PamDiscord(discord.Client):
             "voice-task",
         )
         title = re.sub(r"\s+", " ", title).strip()[:80]
-        return await message.create_thread(name=title or "agent-task", auto_archive_duration=1440)
+        thread = await message.create_thread(
+            name=title or "agent-task",
+            auto_archive_duration=1440,
+        )
+        await self._add_collaborators(thread, message)
+        return thread
+
+    async def _add_collaborators(
+        self,
+        thread: discord.Thread,
+        message: discord.Message,
+    ) -> None:
+        if message.guild is None:
+            return
+        for user_id in self.config.allowed_user_ids:
+            if user_id == message.author.id:
+                continue
+            try:
+                member = message.guild.get_member(user_id)
+                if member is None:
+                    member = await message.guild.fetch_member(user_id)
+                await thread.add_user(member)
+            except (discord.Forbidden, discord.HTTPException, discord.NotFound):
+                LOG.warning("could not add authorized user %s to thread %s", user_id, thread.id)
 
     async def _handle_message(
         self,
@@ -137,6 +196,9 @@ class PamDiscord(discord.Client):
             prompt = "\n\n".join(prompt_parts)
             if not prompt:
                 prompt = "[No speech detected]"
+            agent_prompt = "\n\n".join(
+                part for part in (channel_config.instruction_prefix, prompt) if part
+            )
 
             metadata = {
                 "message_id": message.id,
@@ -156,15 +218,23 @@ class PamDiscord(discord.Client):
                 (record_dir / "transcript.txt").write_text(transcript + "\n", encoding="utf-8")
                 await self._send_chunks(thread, f"**Transcript**\n{transcript}")
             (record_dir / "prompt.txt").write_text(prompt + "\n", encoding="utf-8")
+            (record_dir / "agent-prompt.txt").write_text(agent_prompt + "\n", encoding="utf-8")
             _append_jsonl(
                 conversation_dir / "conversation.jsonl",
                 {"role": "human", "prompt": prompt, **metadata},
+            )
+            project_conversation_dir = self._record_project_message(
+                channel_config,
+                thread,
+                metadata,
+                prompt,
+                transcript,
             )
 
             if channel_config.run_codex:
                 output, session_id = await asyncio.to_thread(
                     self._run_codex,
-                    prompt,
+                    agent_prompt,
                     channel_config.workspace,
                     conversation_dir,
                     record_dir,
@@ -182,6 +252,58 @@ class PamDiscord(discord.Client):
                     },
                 )
                 await self._send_chunks(thread, f"**Codex**\n{output}")
+                if project_conversation_dir is not None:
+                    agent_record = {
+                        "role": "agent",
+                        "agent": "codex",
+                        "session_id": session_id,
+                        "created_at": datetime.now(UTC).isoformat(),
+                        "in_reply_to": message.id,
+                        "output": output,
+                    }
+                    _append_jsonl(project_conversation_dir / "conversation.jsonl", agent_record)
+                    _append_markdown(
+                        project_conversation_dir / "conversation.md",
+                        f"Codex · {agent_record['created_at']}",
+                        output,
+                    )
+
+    def _record_project_message(
+        self,
+        channel_config: ChannelConfig,
+        thread: discord.Thread,
+        metadata: dict[str, object],
+        prompt: str,
+        transcript: str,
+    ) -> Path | None:
+        if channel_config.project_record_dir is None:
+            return None
+        project_dir = channel_config.project_record_dir / str(thread.id)
+        project_dir.mkdir(parents=True, exist_ok=True)
+        project_metadata = project_dir / "metadata.json"
+        if not project_metadata.exists():
+            _write_json(
+                project_metadata,
+                {
+                    "discord_thread_id": thread.id,
+                    "discord_parent_channel_id": thread.parent_id,
+                    "workspace": str(channel_config.workspace),
+                    "created_at": metadata["created_at"],
+                },
+            )
+        human_record = {
+            "role": "human",
+            "prompt": prompt,
+            "transcript": transcript or None,
+            **metadata,
+        }
+        _append_jsonl(project_dir / "conversation.jsonl", human_record)
+        _append_markdown(
+            project_dir / "conversation.md",
+            f"{metadata['author']} · {metadata['created_at']}",
+            prompt,
+        )
+        return project_dir
 
     def _transcribe(self, audio_path: Path) -> str:
         if self._model is None:
@@ -275,8 +397,10 @@ def main() -> None:
     token = os.environ.get("DISCORD_BOT_TOKEN")
     if not token:
         raise SystemExit("DISCORD_BOT_TOKEN is missing; create a local .env from .env.example")
+    config = load_config(args.config)
+    _acquire_instance_lock(config.instance_lock_dir)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
-    PamDiscord(load_config(args.config)).run(token, log_handler=None)
+    PamDiscord(config).run(token, log_handler=None)
 
 
 if __name__ == "__main__":

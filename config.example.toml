@@ -1,5 +1,6 @@
 # Copy to config.toml and replace every example ID/path.
 archive_dir = "./archive"
+instance_lock_dir = "./pam-instance.lock"
 allowed_user_ids = [123456789012345678]
 max_attachment_mb = 25
 max_audio_seconds = 1800
@@ -12,8 +13,9 @@ codex_timeout_seconds = 1800
 [channels."234567890123456789"]
 workspace = "/absolute/path/to/agent-native-genomics"
 run_codex = true
+instruction_prefix = "Follow this project's instructions. Treat this as formal project work."
+project_record_dir = "prompts/conversations"
 
 [channels."345678901234567890"]
 workspace = "/absolute/path/to/personal"
 run_codex = false
-

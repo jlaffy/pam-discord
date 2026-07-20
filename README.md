@@ -24,9 +24,10 @@ When a recording arrives:
 1. Pam identifies the project from the Discord channel.
 2. It downloads the recording and transcribes it locally.
 3. A top-level prompt starts a Discord thread and a matching Codex session.
-4. Codex reads the project, performs the requested work, and replies in the thread.
-5. Voice or text follow-ups in that thread resume the same Codex session.
-6. Pam saves the complete chronological conversation and its underlying files.
+4. Pam adds the other authorized collaborators to the thread.
+5. Codex reads the project, performs the requested work, and replies in the thread.
+6. Voice or text follow-ups in that thread resume the same Codex session.
+7. Pam saves the complete chronological conversation and its underlying files.
 
 There is no scheduled polling and no Codex window left open. Pam waits for Discord events and launches `codex exec` only when work arrives.
 

@@ -9,6 +9,8 @@ from pathlib import Path
 class ChannelConfig:
     workspace: Path
     run_codex: bool = False
+    instruction_prefix: str = ""
+    project_record_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -23,6 +25,7 @@ class Config:
     whisper_compute_type: str
     codex_binary: str
     codex_timeout_seconds: int
+    instance_lock_dir: Path | None = None
 
 
 def load_config(path: Path) -> Config:
@@ -38,7 +41,20 @@ def load_config(path: Path) -> Config:
         workspace = Path(item["workspace"]).expanduser().resolve()
         if not workspace.is_dir():
             raise ValueError(f"workspace for channel {channel_id} is not a directory: {workspace}")
-        channels[int(channel_id)] = ChannelConfig(workspace, bool(item.get("run_codex", False)))
+        record_value = item.get("project_record_dir")
+        record_dir = None
+        if record_value:
+            record_dir = (workspace / str(record_value)).resolve()
+            if not record_dir.is_relative_to(workspace):
+                raise ValueError(
+                    f"project_record_dir for channel {channel_id} must stay inside its workspace"
+                )
+        channels[int(channel_id)] = ChannelConfig(
+            workspace=workspace,
+            run_codex=bool(item.get("run_codex", False)),
+            instruction_prefix=str(item.get("instruction_prefix", "")).strip(),
+            project_record_dir=record_dir,
+        )
     if not channels:
         raise ValueError("at least one [channels.\"ID\"] mapping is required")
 
@@ -58,5 +74,9 @@ def load_config(path: Path) -> Config:
         whisper_compute_type=str(raw.get("whisper_compute_type", "int8")),
         codex_binary=str(raw.get("codex_binary", "codex")),
         codex_timeout_seconds=int(raw.get("codex_timeout_seconds", 1800)),
+        instance_lock_dir=(
+            Path(str(raw["instance_lock_dir"])).expanduser().resolve()
+            if raw.get("instance_lock_dir")
+            else None
+        ),
     )
-
