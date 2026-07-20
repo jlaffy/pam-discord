@@ -41,8 +41,8 @@ Discord reply          <-------        saved archive <- result
 - Each mapped Discord channel points to one local project directory.
 - Each top-level prompt starts a thread; follow-ups in that thread retain Codex context.
 - Both voice recordings and ordinary text messages can prompt or continue work.
-- Codex may read and change files or run commands according to its permissions and the project's instructions.
-- Pam does not automatically create branches, push commits, open PRs, or merge work.
+- Discord can serve as the project's control surface: prompts may direct research, file changes, analyses, validation, branches, commits, and review or submission workflows.
+- Codex performs only actions allowed by its permissions and the project's own instructions. For example, one project may permit PR creation while another delegates submission to a separate service.
 - Replies appear after transcription and the Codex task finish; long tasks can take time.
 - Pam must be running and online to receive new work.
 - Native Discord voice recording is mobile-only; desktop users upload an audio file.
