@@ -107,7 +107,7 @@ Each channel points to one workspace—the local project directory where Codex w
 ### 4. Run
 
 ```bash
-pam-discord --config config.toml
+pam-discord --env-file .env --config config.toml
 ```
 
 Send a short voice message in a mapped channel. Pam creates a thread and replies there with the transcript and Codex result. Add another voice or text message inside the thread to continue the same agent session.

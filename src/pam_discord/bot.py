@@ -392,8 +392,14 @@ class PamDiscord(discord.Client):
 def main() -> None:
     parser = argparse.ArgumentParser(description="Run the Pam Discord agent bridge")
     parser.add_argument("--config", type=Path, default=Path("config.toml"))
+    parser.add_argument(
+        "--env-file",
+        type=Path,
+        default=Path(".env"),
+        help="Private dotenv file containing DISCORD_BOT_TOKEN",
+    )
     args = parser.parse_args()
-    load_dotenv()
+    load_dotenv(args.env_file)
     token = os.environ.get("DISCORD_BOT_TOKEN")
     if not token:
         raise SystemExit("DISCORD_BOT_TOKEN is missing; create a local .env from .env.example")
