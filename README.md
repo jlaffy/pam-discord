@@ -1,143 +1,120 @@
 # Pam Discord
 
-**Turn a Discord voice note into durable, local, agent-ready work.**
+Pam Discord lets you direct Codex work from Discord using voice recordings.
 
-Pam Discord is a small, self-hosted inbox for people who think out loud. Send an audio file or Discord voice message in a mapped channel; Pam saves it, transcribes it locally with `faster-whisper`, and can pass the transcript to `codex exec` in the right project directory.
+Send a voice message from your phone. Pam saves the original recording, transcribes it locally, runs the transcript as a Codex task inside the project mapped to that Discord channel, saves the result, and replies in Discord.
 
 ```text
-Discord voice/audio → local archive → faster-whisper → Codex → saved result + Discord reply
+voice instruction
+  -> saved recording and transcript
+  -> Codex acts in the selected project
+  -> saved result and Discord reply
 ```
 
-- Local transcription: no transcription API bill
-- Existing Codex login: uses your local ChatGPT-authenticated Codex session
-- Clear routing: one Discord channel per personal area or project
-- Durable records: audio, transcript, metadata, and Codex output stay on your machine
-- Explicit cost boundary: no OpenAI or Anthropic API key, and no automatic fallback to a metered API
+This creates a documented, trackable channel for prompting agents and reviewing what they did. Discord is the interface; the actual work happens in local project repositories.
 
-> Pam Discord is an early, intentionally small project. Review its behavior and test it in a non-critical workspace before relying on it.
+Pam uses local `faster-whisper` transcription and a ChatGPT-authenticated Codex CLI. It does not require an OpenAI or Anthropic API key and never falls back to metered model APIs. Codex plan limits still apply.
 
-## What you need
+> This is an early release. Test it in a non-critical project before relying on it.
 
-- Python 3.11+
-- A computer or server that can stay online while Pam listens
-- A Discord server where you can add a bot
-- The [Codex CLI](https://developers.openai.com/codex/cli/) installed and already signed in with `codex login`
-- Enough disk space for your recordings and Whisper model; the model downloads on first use
+## What it does
 
-You do **not** need an OpenAI API key or Anthropic API key. Pam removes `OPENAI_API_KEY` from the environment before launching Codex. If the local Codex login is missing or fails, the job fails visibly; it does not switch to metered API billing.
+- Accepts Discord voice messages and uploaded audio from approved users
+- Maps each Discord channel to a local project
+- Saves the original audio, transcript, author, time, and channel
+- Runs `codex exec` inside the mapped project when enabled
+- Saves the Codex result and replies in Discord
+- Keeps personal and project work separated by channel
 
-## Set up in about ten minutes
+## Setup
 
-### 1. Create the Discord bot
+You need Python 3.11+, a Discord server, an online computer or Linux server, and the [Codex CLI](https://developers.openai.com/codex/cli/) signed in with ChatGPT.
 
-1. Open the [Discord Developer Portal](https://discord.com/developers/applications), select **New Application**, then open **Bot**.
-2. Create/reset the bot token and keep it private.
-3. Enable **Message Content Intent** under **Privileged Gateway Intents**.
-4. Under **OAuth2 → URL Generator**, select the `bot` scope. Grant **View Channels**, **Send Messages**, **Read Message History**, and **Attach Files**, then use the generated URL to invite the bot to your server.
-
-Never paste the bot token into chat, commit it, or put it in `config.toml`.
-
-### 2. Install Pam
+### 1. Install
 
 ```bash
-git clone https://github.com/YOUR-NAME/pam-discord.git
+git clone https://github.com/jlaffy/pam-discord.git
 cd pam-discord
 python3 -m venv .venv
 source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -e .
-```
-
-On Windows PowerShell, activate with `.venv\Scripts\Activate.ps1`.
-
-Confirm Codex is installed and authenticated:
-
-```bash
+pip install -e .
 codex login
 ```
 
-Choose **Sign in with ChatGPT** when prompted. Pam uses that existing local session; it does not collect your ChatGPT credentials.
+On Windows, activate with `.venv\Scripts\Activate.ps1`.
 
-### 3. Configure secrets and routing
+### 2. Create a Discord bot
+
+In the [Discord Developer Portal](https://discord.com/developers/applications):
+
+1. Create an application and add a bot.
+2. Enable **Message Content Intent**.
+3. Invite it to your server with **View Channels**, **Read Message History**, **Send Messages**, and **Attach Files** permissions.
+4. Copy its token. Keep the token private.
+
+### 3. Configure
 
 ```bash
 cp .env.example .env
 cp config.example.toml config.toml
 ```
 
-Put only the Discord token in `.env`:
+Add the Discord token to `.env`:
 
 ```dotenv
 DISCORD_BOT_TOKEN=your-private-bot-token
 ```
 
-In Discord, enable **User Settings → Advanced → Developer Mode**. Right-click your profile to **Copy User ID**, and right-click each channel to **Copy Channel ID**. Then edit `config.toml`:
+Enable Discord **Developer Mode**, then copy your user ID and channel IDs. Edit `config.toml`:
 
 ```toml
 archive_dir = "./archive"
 allowed_user_ids = [111111111111111111]
-whisper_model = "small.en"
 
 [channels."222222222222222222"]
 workspace = "/absolute/path/to/agent-native-genomics"
 run_codex = true
 
 [channels."333333333333333333"]
-workspace = "/absolute/path/to/personal"
-run_codex = false
-
-[channels."444444444444444444"]
-workspace = "/absolute/path/to/another-project"
+workspace = "/absolute/path/to/personal-workspace"
 run_codex = true
 ```
 
-Each channel is an independent inbox. `workspace` tells Codex which directory to work in; `run_codex = false` makes a channel transcription-only. Only users listed in `allowed_user_ids` are processed. Use absolute workspace paths and give the bot access only to the Discord channels it needs.
+Each channel points to one workspace—the local directory where Codex will act. Only listed users and mapped channels are processed.
 
-### 4. Run it
+### 4. Run
 
 ```bash
-source .venv/bin/activate
 pam-discord --config config.toml
 ```
 
-Send a Discord voice message or attach an audio file in a mapped channel. Pam replies with the transcript, then the Codex result when enabled. Stop it with `Ctrl+C`. For continuous use, run the same command under your preferred service manager (for example, systemd or a container supervisor).
+Send a short voice message in a mapped channel. Pam should reply first with the transcript and then with the Codex result.
 
-## What gets saved
+For continuous availability, run Pam as a background service on a machine that stays online.
 
-The archive is local and chronological:
+## Record of each instruction
 
 ```text
-archive/
-└── 2026/07/20/<discord-message-id>/
-    ├── recording.ogg
-    ├── metadata.json
-    ├── transcript.txt
-    └── codex-output.txt    # only when Codex runs
+archive/YYYY/MM/DD/<discord-message-id>/
+├── recording.ogg
+├── metadata.json
+├── transcript.txt
+├── prompt.txt
+└── codex-output.txt
 ```
 
-`metadata.json` records the message, author, channel, time, workspace, and routing choice. Discord retains its own message thread according to your server settings; the local archive remains the source record under your control.
+The archive records what was requested, who requested it, which project received it, and what Codex returned. Changes made by Codex remain in that project's workspace and should follow the project's branch and review rules.
 
-## Voice today
+## Current voice support
 
-This release processes **voice messages and uploaded audio attachments**. It does not join, listen to, or record Discord live voice channels. Discord's recording controls can also differ by client; if your desktop app does not offer a voice-message record button, record with your operating system and upload the audio file, or send the voice message from mobile.
+Discord can send native voice messages from its mobile apps. On desktop, record audio with your operating system and upload the file. Pam does not record live Discord calls. A direct desktop recording shortcut is planned.
 
-A lightweight desktop recorder and upload shortcut are natural roadmap items. They are not part of the current release.
+## Security and privacy
 
-## Privacy and consent
+- Never commit `.env`, `config.toml`, recordings, or private transcripts.
+- Allowlist users and expose the bot only to necessary channels.
+- Use private channels for private work.
+- Obtain consent before recording other people.
+- Define retention rules for audio and transcripts.
 
-Audio and transcripts can contain highly sensitive information. Tell everyone being recorded, obtain any consent required where you live, and follow your organization’s policies. Keep `.env`, `config.toml`, and `archive/` out of version control; restrict filesystem access; use private Discord channels; and define a retention/deletion policy. Codex receives the transcript only in channels where `run_codex = true`.
-
-## Terms used here
-
-- **Discord bot:** the application account that receives messages and posts replies.
-- **Mapped channel:** a Discord channel ID connected to one local workspace.
-- **Workspace:** the local project directory passed to Codex.
-- **Local transcription:** speech-to-text performed on your machine by `faster-whisper`.
-- **Archive:** the local, timestamped record of audio, metadata, transcript, and result.
-- **Codex result:** stdout returned by `codex exec`; any workspace changes Codex makes remain in that workspace.
-
-## Contributing
-
-Issues and focused pull requests are welcome. Please do not include real recordings, transcripts, tokens, private paths, or other personal data in bug reports.
-
-Licensed under the MIT License.
+MIT licensed. Contributions are welcome; never include real recordings, credentials, or private paths in issues.
