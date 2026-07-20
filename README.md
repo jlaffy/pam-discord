@@ -15,8 +15,6 @@ This creates a documented, trackable channel for prompting agents and reviewing 
 
 Pam uses local `faster-whisper` transcription and a ChatGPT-authenticated Codex CLI. It does not require an OpenAI or Anthropic API key and never falls back to metered model APIs. Codex plan limits still apply.
 
-> This is an early release. Test it in a non-critical project before relying on it.
-
 ## How it works
 
 Pam is a small program that stays running on your computer or server. It connects to Discord using a free bot account and waits for recordings from approved users.
