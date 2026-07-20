@@ -1,12 +1,12 @@
 # Pam Discord
 
-Pam Discord lets you direct Codex work from Discord using voice recordings.
+Pam Discord lets you direct Codex work from Discord using voice or text, from a phone or computer.
 
-Send a voice message from your phone. Pam saves the original recording, transcribes it locally, runs the transcript as a Codex task inside the project mapped to that Discord channel, saves the result, and replies in Discord.
+Send a voice message or text from your phone, or send text or upload a recording from your computer. Pam preserves the input, transcribes recordings locally, runs the instruction as a Codex task inside the project mapped to that Discord channel, saves the result, and replies in Discord.
 
 ```text
-voice instruction
-  -> saved recording and transcript
+voice or text instruction
+  -> saved input and transcript (for voice)
   -> Codex acts in the selected project
   -> saved result and Discord reply
 ```
