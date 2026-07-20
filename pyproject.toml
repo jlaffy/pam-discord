@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pam-discord"
+version = "0.1.0"
+description = "A local-first Discord voice inbox for Codex"
+requires-python = ">=3.11"
+dependencies = [
+  "discord.py>=2.4,<3",
+  "faster-whisper>=1.1,<2",
+  "python-dotenv>=1.0,<2",
+]
+
+[project.scripts]
+pam-discord = "pam_discord.bot:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pam_discord"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
