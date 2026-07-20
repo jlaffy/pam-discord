@@ -17,18 +17,39 @@ Pam uses local `faster-whisper` transcription and a ChatGPT-authenticated Codex 
 
 > This is an early release. Test it in a non-critical project before relying on it.
 
-## What it does
+## How it works
 
-- Accepts Discord voice messages and uploaded audio from approved users
-- Maps each Discord channel to a local project
-- Saves the original audio, transcript, author, time, and channel
-- Runs `codex exec` inside the mapped project when enabled
-- Saves the Codex result and replies in Discord
-- Keeps personal and project work separated by channel
+Pam is a small program that stays running on your computer or server. It connects to Discord using a free bot account and waits for recordings from approved users.
+
+When a recording arrives:
+
+1. Pam identifies the project from the Discord channel.
+2. It downloads the recording and transcribes it locally.
+3. It starts a new Codex task in that project's local repository.
+4. Codex reads the project, performs the requested work, and returns a result.
+5. Pam saves the recording, transcript, metadata, prompt, and result, then replies in Discord.
+
+There is no scheduled polling and no Codex window left open. Pam waits for Discord events and launches `codex exec` only when work arrives.
+
+```text
+phone or computer                 always-on computer/server
+Discord voice message  ------->  Pam -> local project -> Codex
+Discord reply          <-------        saved archive <- result
+```
+
+## What to expect today
+
+- Each mapped Discord channel points to one local project directory.
+- Each recording starts a separate Codex task; follow-up conversation memory is not implemented yet.
+- Codex may read and change files or run commands according to its permissions and the project's instructions.
+- Pam does not automatically create branches, push commits, open PRs, or merge work.
+- Replies appear after transcription and the Codex task finish; long tasks can take time.
+- Pam must be running and online to receive new work.
+- Native Discord voice recording is mobile-only; desktop users upload an audio file.
 
 ## Setup
 
-You need Python 3.11+, a Discord server, an online computer or Linux server, and the [Codex CLI](https://developers.openai.com/codex/cli/) signed in with ChatGPT.
+You need Python 3.11+, a Discord server, an online computer or Linux server, and the [Codex CLI](https://developers.openai.com/codex/cli/) signed in with ChatGPT. Clone every project you want Pam to use onto that same machine.
 
 ### 1. Install
 
@@ -80,7 +101,7 @@ workspace = "/absolute/path/to/personal-workspace"
 run_codex = true
 ```
 
-Each channel points to one workspace—the local directory where Codex will act. Only listed users and mapped channels are processed.
+Each channel points to one workspace—the local project directory where Codex will act. Only listed users and mapped channels are processed.
 
 ### 4. Run
 
@@ -91,6 +112,8 @@ pam-discord --config config.toml
 Send a short voice message in a mapped channel. Pam should reply first with the transcript and then with the Codex result.
 
 For continuous availability, run Pam as a background service on a machine that stays online.
+
+Your first test should request something harmless, such as: “Read this project's README and summarize it without changing any files.” Confirm the transcript, reply, and archive before allowing editing tasks.
 
 ## Record of each instruction
 
