@@ -1,0 +1,18 @@
+{
+  "name": "pam",
+  "version": "0.1.0+codex.20260722035652",
+  "description": "Link a Codex CLI conversation to its project's Pam Discord server.",
+  "author": {
+    "name": "Local developer"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "Pam",
+    "shortDescription": "Link this Codex conversation to Pam.",
+    "longDescription": "Connect the current Codex conversation to a shared Pam Discord thread.",
+    "developerName": "Pam",
+    "category": "Productivity",
+    "capabilities": [],
+    "defaultPrompt": "Link this Codex conversation to Pam."
+  }
+}

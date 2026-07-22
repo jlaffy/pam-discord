@@ -17,6 +17,7 @@ import discord
 from dotenv import load_dotenv
 from faster_whisper import WhisperModel
 
+from .app_server import CodexAppServer, load_shared_sessions, save_shared_sessions
 from .config import ChannelConfig, Config, load_config
 
 LOG = logging.getLogger("pam_discord")
@@ -88,9 +89,21 @@ class PamDiscord(discord.Client):
         self._model: WhisperModel | None = None
         self._model_lock = asyncio.Lock()
         self._conversation_locks: dict[int, asyncio.Lock] = {}
+        self._app_server = CodexAppServer(
+            self.config.codex_app_server_url, self._handle_app_server_notification
+        )
+        self._link_watcher: asyncio.Task[None] | None = None
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
+        await self._app_server.start(self.config.codex_binary)
+        self._link_watcher = asyncio.create_task(self._watch_link_requests())
+
+    async def close(self) -> None:
+        if self._link_watcher is not None:
+            self._link_watcher.cancel()
+        await self._app_server.close()
+        await super().close()
 
     async def on_ready(self) -> None:
         LOG.info(
@@ -239,6 +252,22 @@ class PamDiscord(discord.Client):
                 transcript,
             )
 
+            shared_thread_id = self._shared_codex_thread(channel_config.workspace, thread.id)
+            if shared_thread_id is not None:
+                await self._app_server.request(
+                    "thread/resume", {"threadId": shared_thread_id}
+                )
+                await self._app_server.request(
+                    "turn/start",
+                    {
+                        "threadId": shared_thread_id,
+                        "input": [{"type": "text", "text": agent_prompt}],
+                        "clientUserMessageId": f"discord:{message.id}",
+                        "approvalPolicy": "never",
+                    },
+                )
+                return
+
             if channel_config.run_codex:
                 output, session_id = await asyncio.to_thread(
                     self._run_codex,
@@ -248,6 +277,14 @@ class PamDiscord(discord.Client):
                     record_dir,
                 )
                 (record_dir / "codex-output.txt").write_text(output + "\n", encoding="utf-8")
+                sessions = load_shared_sessions(channel_config.workspace)
+                sessions[session_id] = thread.id
+                save_shared_sessions(channel_config.workspace, sessions)
+                if project_record is not None:
+                    metadata_path = project_record[0] / "metadata.json"
+                    project_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    project_metadata["codex_thread_id"] = session_id
+                    _write_json(metadata_path, project_metadata)
                 _append_jsonl(
                     conversation_dir / "conversation.jsonl",
                     {
@@ -317,6 +354,222 @@ class PamDiscord(discord.Client):
             prompt,
         )
         return project_dir, project_message_dir
+
+    def _shared_codex_thread(self, workspace: Path, discord_thread_id: int) -> str | None:
+        for codex_thread_id, mapped_discord_id in load_shared_sessions(workspace).items():
+            if mapped_discord_id == discord_thread_id:
+                return codex_thread_id
+        return None
+
+    def _workspace_config_for_cwd(self, cwd: Path) -> ChannelConfig | None:
+        matches = [
+            item
+            for item in self.config.guilds.values()
+            if cwd == item.workspace or cwd.is_relative_to(item.workspace)
+        ]
+        return max(matches, key=lambda item: len(item.workspace.parts), default=None)
+
+    async def _handle_app_server_notification(self, event: dict[str, object]) -> None:
+        method = event.get("method")
+        params = event.get("params")
+        if not isinstance(params, dict):
+            return
+        if method == "thread/started":
+            thread_value = params.get("thread")
+            if isinstance(thread_value, dict):
+                await self._link_started_codex_thread(thread_value)
+                self._record_app_server_event(str(thread_value.get("id") or ""), event)
+        elif method == "item/completed":
+            self._record_app_server_event(str(params.get("threadId") or ""), event)
+            await self._mirror_completed_codex_item(params)
+        else:
+            self._record_app_server_event(str(params.get("threadId") or ""), event)
+
+    def _record_app_server_event(
+        self, codex_thread_id: str, event: dict[str, object]
+    ) -> None:
+        if not codex_thread_id:
+            return
+        for channel_config in self.config.guilds.values():
+            discord_thread_id = load_shared_sessions(channel_config.workspace).get(codex_thread_id)
+            if discord_thread_id is None or channel_config.project_record_dir is None:
+                continue
+            conversation_dir = channel_config.project_record_dir / str(discord_thread_id)
+            conversation_dir.mkdir(parents=True, exist_ok=True)
+            _append_jsonl(conversation_dir / "codex-events.jsonl", event)
+            return
+
+    async def _watch_link_requests(self) -> None:
+        request_dir = self.config.archive_dir.parent / "link-requests"
+        request_dir.mkdir(parents=True, exist_ok=True)
+        while True:
+            for path in request_dir.glob("*.json"):
+                try:
+                    request = json.loads(path.read_text(encoding="utf-8"))
+                    result = await self._app_server.request(
+                        "thread/read",
+                        {"threadId": str(request["thread_id"]), "includeTurns": True},
+                    )
+                    thread = result.get("thread") if isinstance(result, dict) else None
+                    if isinstance(thread, dict):
+                        await self._link_started_codex_thread(thread)
+                    path.unlink()
+                except Exception:
+                    LOG.exception("failed to process Pam link request %s", path)
+            await self._sync_shared_sessions()
+            await asyncio.sleep(2)
+
+    async def _sync_shared_sessions(self) -> None:
+        """Import turns written by Codex clients that predate `pam codex`."""
+        seen: set[str] = set()
+        for channel_config in self.config.guilds.values():
+            for codex_thread_id in load_shared_sessions(channel_config.workspace):
+                if codex_thread_id in seen:
+                    continue
+                seen.add(codex_thread_id)
+                try:
+                    await self._import_codex_history(codex_thread_id)
+                except Exception:
+                    LOG.exception("failed to sync Codex conversation %s", codex_thread_id)
+
+    async def _link_started_codex_thread(self, value: dict[str, object]) -> None:
+        codex_thread_id = str(value.get("id") or "")
+        cwd_value = value.get("cwd")
+        if not codex_thread_id or not isinstance(cwd_value, str):
+            return
+        channel_config = self._workspace_config_for_cwd(Path(cwd_value).resolve())
+        if channel_config is None:
+            return
+        sessions = load_shared_sessions(channel_config.workspace)
+        if codex_thread_id in sessions:
+            return
+        parent = next(
+            (
+                self.get_channel(channel_id)
+                for channel_id, item in self.config.channels.items()
+                if item.workspace == channel_config.workspace
+            ),
+            None,
+        )
+        if not isinstance(parent, discord.TextChannel):
+            LOG.warning("no default Discord channel for Codex thread %s", codex_thread_id)
+            return
+        preview = str(value.get("name") or value.get("preview") or "").strip()
+        title = re.sub(r"\s+", " ", preview)[:80] or f"Codex {codex_thread_id[:8]}"
+        discord_thread = await parent.create_thread(
+            name=title,
+            auto_archive_duration=1440,
+            type=discord.ChannelType.public_thread,
+        )
+        sessions[codex_thread_id] = discord_thread.id
+        save_shared_sessions(channel_config.workspace, sessions)
+        if channel_config.project_record_dir is not None:
+            conversation_dir = channel_config.project_record_dir / str(discord_thread.id)
+            conversation_dir.mkdir(parents=True, exist_ok=True)
+            _write_json(
+                conversation_dir / "metadata.json",
+                {
+                    "codex_thread_id": codex_thread_id,
+                    "discord_thread_id": discord_thread.id,
+                    "discord_parent_channel_id": parent.id,
+                    "workspace": str(channel_config.workspace),
+                    "created_at": datetime.now(UTC).isoformat(),
+                    "source": "terminal",
+                },
+            )
+        await discord_thread.send("**Pam** · Shared terminal and Discord Codex session connected.")
+        await self._import_codex_history(codex_thread_id)
+
+    async def _import_codex_history(self, codex_thread_id: str) -> None:
+        result = await self._app_server.request(
+            "thread/read", {"threadId": codex_thread_id, "includeTurns": True}
+        )
+        thread = result.get("thread") if isinstance(result, dict) else None
+        turns = thread.get("turns", []) if isinstance(thread, dict) else []
+        for turn in turns:
+            if not isinstance(turn, dict):
+                continue
+            for item in turn.get("items", []):
+                if isinstance(item, dict):
+                    await self._mirror_completed_codex_item(
+                        {"threadId": codex_thread_id, "item": item}
+                    )
+
+    async def _mirror_completed_codex_item(self, params: dict[str, object]) -> None:
+        codex_thread_id = str(params.get("threadId") or "")
+        item = params.get("item")
+        if not codex_thread_id or not isinstance(item, dict):
+            return
+        for channel_config in self.config.guilds.values():
+            discord_thread_id = load_shared_sessions(channel_config.workspace).get(codex_thread_id)
+            if discord_thread_id is None:
+                continue
+            record_dir = channel_config.project_record_dir
+            item_id = str(item.get("id") or "")
+            imported_path = (
+                record_dir / str(discord_thread_id) / "imported-items.json"
+                if record_dir is not None
+                else None
+            )
+            imported = set()
+            if imported_path is not None and imported_path.exists():
+                imported = set(json.loads(imported_path.read_text(encoding="utf-8")))
+            if item_id and item_id in imported:
+                return
+            discord_thread = self.get_channel(discord_thread_id)
+            if not isinstance(discord_thread, discord.Thread):
+                try:
+                    discord_thread = await self.fetch_channel(discord_thread_id)
+                except discord.HTTPException:
+                    return
+            item_type = item.get("type")
+            if item_type == "userMessage":
+                if str(item.get("clientId") or "").startswith("discord:"):
+                    if item_id and imported_path is not None:
+                        imported.add(item_id)
+                        imported_path.parent.mkdir(parents=True, exist_ok=True)
+                        imported_path.write_text(
+                            json.dumps(sorted(imported), indent=2) + "\n", encoding="utf-8"
+                        )
+                    return
+                content = item.get("content")
+                text = "\n".join(
+                    str(part.get("text"))
+                    for part in content if isinstance(part, dict) and part.get("type") == "text"
+                ) if isinstance(content, list) else ""
+                role, label = "human", "Terminal"
+            elif item_type == "agentMessage":
+                text = str(item.get("text") or "")
+                role, label = "agent", "Codex"
+            else:
+                return
+            if not text:
+                return
+            if record_dir is not None:
+                conversation_dir = record_dir / str(discord_thread_id)
+                conversation_dir.mkdir(parents=True, exist_ok=True)
+                _append_jsonl(
+                    conversation_dir / "conversation.jsonl",
+                    {
+                        "role": role,
+                        "source": "terminal" if role == "human" else "codex",
+                        "codex_thread_id": codex_thread_id,
+                        "created_at": datetime.now(UTC).isoformat(),
+                        "text": text,
+                    },
+                )
+                _append_markdown(
+                    conversation_dir / "conversation.md",
+                    f"{label} · {datetime.now(UTC).isoformat()}",
+                    text,
+                )
+            await self._send_chunks(discord_thread, f"**{label}**\n{text}")
+            if item_id and imported_path is not None:
+                imported.add(item_id)
+                imported_path.write_text(
+                    json.dumps(sorted(imported), indent=2) + "\n", encoding="utf-8"
+                )
+            return
 
     def _transcribe(self, audio_path: Path) -> str:
         if self._model is None:

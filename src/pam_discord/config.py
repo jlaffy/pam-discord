@@ -26,6 +26,7 @@ class Config:
     whisper_compute_type: str
     codex_binary: str
     codex_timeout_seconds: int
+    codex_app_server_url: str
     instance_lock_dir: Path | None = None
 
 
@@ -93,6 +94,9 @@ def load_config(path: Path) -> Config:
         whisper_compute_type=str(raw.get("whisper_compute_type", "int8")),
         codex_binary=str(raw.get("codex_binary", "codex")),
         codex_timeout_seconds=int(raw.get("codex_timeout_seconds", 1800)),
+        codex_app_server_url=str(
+            raw.get("codex_app_server_url", "ws://127.0.0.1:45832")
+        ),
         instance_lock_dir=(
             Path(str(raw["instance_lock_dir"])).expanduser().resolve()
             if raw.get("instance_lock_dir")

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-repo_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+script_path=$(readlink -f -- "${BASH_SOURCE[0]}")
+repo_dir=$(cd -- "$(dirname -- "$script_path")" && pwd)
 executable="$repo_dir/.venv/bin/pam-discord"
 
 if [[ ! -x "$executable" ]]; then

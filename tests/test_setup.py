@@ -11,6 +11,7 @@ from pam_discord.setup import (
     _discord_install_url,
     _prepare_discord_workspace,
     doctor,
+    project_add,
     setup,
 )
 
@@ -240,3 +241,37 @@ def test_setup_can_make_conversation_history_trackable(
     )
 
     assert ignore.read_text() == "data/\n"
+
+
+def test_identity_setup_once_then_add_multiple_projects(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "pam-state"
+    first = tmp_path / "first"
+    second = tmp_path / "second"
+    first.mkdir()
+    second.mkdir()
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    created = iter(
+        [
+            (222, 333, "https://discord.com/channels/333/222"),
+            (444, 555, "https://discord.com/channels/555/444"),
+        ]
+    )
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace", lambda *_args, **_kwargs: next(created)
+    )
+
+    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+    project_add(
+        [str(first), "--state-dir", str(state_dir), "--ignore-history", "--no-service"]
+    )
+    project_add(
+        [str(second), "--state-dir", str(state_dir), "--ignore-history", "--no-service"]
+    )
+
+    config = load_config(state_dir / "config.toml")
+    assert set(config.guilds) == {333, 555}
+    assert config.guilds[333].workspace == first
+    assert config.guilds[555].workspace == second
+    assert (state_dir / ".env").read_text() == "DISCORD_BOT_TOKEN=private-token\n"

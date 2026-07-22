@@ -14,7 +14,7 @@ shared sessions     → continue in the terminal or Discord
 ## Start here
 
 > [!NOTE]
-> Steps 1–3 happen once. Repeat Step 4 for every project you connect.
+> Steps 1–4 happen once. Repeat Step 5 for every project you connect.
 
 ### 1. Install
 
@@ -42,21 +42,23 @@ codex login
 - Turn on **Developer Mode**.
 - Right-click your own name or picture and click **Copy User ID**.
 
-### 4. Connect your project
+### 4. Finish Pam setup
+
+```bash
+pam setup
+```
+
+Paste the Discord user ID and bot token from Steps 2–3.
+
+### 5. Connect a project
 
 Replace the example path with your project directory:
 
 ```bash
-./pam setup /ewsc/jlaffy/agent-native-genomics
+pam project add /ewsc/jlaffy/agent-native-genomics
 ```
 
-Pam asks for:
-
-```text
-Discord user ID  → paste the ID from step 3
-Discord bot token → paste the token from step 2
-Git history       → choose whether `.pam/` is ignored or can be committed
-```
+Choose whether `.pam/` conversation history is ignored by Git or can be committed.
 
 Follow the terminal instructions. Pam gives you links to:
 
@@ -65,14 +67,11 @@ Follow the terminal instructions. Pam gives you links to:
 
 Pam prints a Discord link to `#general`. Open it and send your first message.
 
-### 5. Use terminal and Discord shared sessions
-
-> [!IMPORTANT]
-> Coming soon — this step is not implemented yet.
+### 6. Use terminal and Discord shared sessions
 
 | Start a new linked conversation | Link one already in progress |
 | --- | --- |
-| `pam codex` | `/pam link` |
+| `pam codex` | Ask Codex: `Link this conversation to Pam` |
 
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
@@ -92,10 +91,10 @@ Pam stays running after you disconnect. Conversation history is saved in
 ## Help
 
 ```bash
-./pam doctor            # check Discord, Codex, and project setup
-./pam service status    # check whether Pam is running
-./pam service logs      # show recent activity and errors
-./pam service restart   # restart Pam
+pam doctor            # check Discord, Codex, and project setup
+pam service status    # check whether Pam is running
+pam service logs      # show recent activity and errors
+pam service restart   # restart Pam
 ```
 
 MIT licensed.

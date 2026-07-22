@@ -21,6 +21,15 @@ PY
 echo "Installing Pam in $repo_dir/.venv"
 python3 -m venv .venv
 PIP_DISABLE_PIP_VERSION_CHECK=1 .venv/bin/python -m pip install --quiet -e .
+mkdir -p "$HOME/.local/bin"
+ln -sfn "$repo_dir/pam" "$HOME/.local/bin/pam"
+
+if command -v codex >/dev/null 2>&1; then
+  if ! codex plugin marketplace list --json 2>/dev/null | grep -q '"name": "pam-discord"'; then
+    codex plugin marketplace add "$repo_dir"
+  fi
+  codex plugin add pam@pam-discord
+fi
 
 echo
 echo "Pam is installed. Continue with:"

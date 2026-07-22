@@ -1,6 +1,6 @@
 # Pam product decisions
 
-This file records agreed product behavior. Items marked **planned** are not implemented yet.
+This file records agreed product behavior.
 
 ## Purpose
 
@@ -44,7 +44,7 @@ Discord or a terminal. Records live under `<project>/.pam/conversations/`.
 Setup asks whether `.pam/` should be ignored by Git or available to commit. Ignoring is the default;
 Pam never uploads conversation history automatically.
 
-## Direct Codex sessions — planned
+## Direct Codex sessions
 
 ```bash
 pam codex [normal Codex options]
@@ -60,15 +60,9 @@ If the directory has no Pam project server yet, the command:
 2. Gives the user a link to add their existing Pam bot.
 3. Connects `#general`, creates the first session thread, and starts Codex.
 
-Later runs open immediately. An optional channel selects where the thread appears:
-
-```bash
-pam codex --yolo --channel papers
-```
-
-An already-running Codex session can be linked with `/pam link`. Pam offers to show a summary and
-recent messages, the full history, or no prior history in Discord. The complete local record is
-preserved regardless of the display choice.
+Later runs open immediately. An already-running Codex session can be linked by asking Codex to
+"Link this conversation to Pam" or by running `pam link`. Pam imports its existing history before
+continuing live in Discord.
 
 Pam launches the real Codex command; it does not replace or shadow the `codex` executable. The
 shared-session connection should use Codex's app-server rather than pretending that two separate

@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import json
 import subprocess
+import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
 from pam_discord.bot import PamDiscord
-from pam_discord.config import Config
+from pam_discord.app_server import save_shared_sessions
+from pam_discord.config import ChannelConfig, Config
 
 
 def _bot(tmp_path: Path) -> PamDiscord:
@@ -23,6 +25,7 @@ def _bot(tmp_path: Path) -> PamDiscord:
             whisper_compute_type="int8",
             codex_binary="codex",
             codex_timeout_seconds=60,
+            codex_app_server_url="ws://127.0.0.1:45832",
         )
     )
 
@@ -55,3 +58,21 @@ def test_new_task_is_saved_and_followup_resumes_same_session(tmp_path: Path) -> 
     assert json.loads((conversation / "state.json").read_text())["codex_session_id"] == session_id
     assert (first / "codex-events.jsonl").exists()
     assert (second / "codex-events.jsonl").exists()
+
+
+def test_linked_terminal_sessions_are_polled_for_new_turns(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    channel = ChannelConfig(workspace=workspace, project_record_dir=tmp_path / "records")
+    bot = _bot(tmp_path)
+    bot.config.guilds[10] = channel
+    save_shared_sessions(workspace, {"codex-thread": 123})
+    imported: list[str] = []
+
+    async def import_history(thread_id: str) -> None:
+        imported.append(thread_id)
+
+    bot._import_codex_history = import_history  # type: ignore[method-assign]
+    asyncio.run(bot._sync_shared_sessions())
+
+    assert imported == ["codex-thread"]

@@ -81,6 +81,7 @@ whisper_device = "cpu"
 whisper_compute_type = "int8"
 codex_binary = "codex"
 codex_timeout_seconds = 1800
+codex_app_server_url = "ws://127.0.0.1:45832"
 
 [channels.{_toml_string(str(channel_id))}]
 workspace = {_toml_string(str(workspace))}
@@ -95,6 +96,52 @@ instruction_prefix = "Follow this project's instructions."
 project_record_dir = ".pam/conversations"
 """
     _write_private(path, content)
+
+
+def _project_config_block(channel_id: int, guild_id: int, workspace: Path) -> str:
+    return f"""
+
+[channels.{_toml_string(str(channel_id))}]
+workspace = {_toml_string(str(workspace))}
+run_codex = true
+instruction_prefix = "Follow this project's instructions."
+project_record_dir = ".pam/conversations"
+
+[guilds.{_toml_string(str(guild_id))}]
+workspace = {_toml_string(str(workspace))}
+run_codex = true
+instruction_prefix = "Follow this project's instructions."
+project_record_dir = ".pam/conversations"
+"""
+
+
+def _write_identity(state_dir: Path, user_id: int) -> None:
+    path = state_dir / "identity.json"
+    if not path.exists():
+        _write_private(path, json.dumps({"discord_user_id": user_id}, indent=2) + "\n")
+
+
+def _setup_identity(args: argparse.Namespace) -> None:
+    state_dir = (
+        args.state_dir
+        or Path(_ask("Pam data directory", str(DEFAULT_STATE_DIR.expanduser())))
+    ).expanduser().resolve()
+    state_dir.mkdir(parents=True, exist_ok=True)
+    state_dir.chmod(stat.S_IRWXU)
+    env_path = state_dir / ".env"
+    identity_path = state_dir / "identity.json"
+    if env_path.exists() or identity_path.exists():
+        raise SystemExit("Pam is already set up. Add a project with `./pam project add PATH`.")
+    user_id = _positive_id(
+        str(args.user_id or _ask("Your Discord user ID")), "Discord user ID"
+    )
+    token = getpass.getpass("Discord bot token (hidden): ").strip()
+    if not token:
+        raise SystemExit("Discord bot token is required")
+    _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
+    _write_identity(state_dir, user_id)
+    print("\nPam identity saved. Connect a project with:")
+    print("  ./pam project add /path/to/project")
 
 
 def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
@@ -141,6 +188,10 @@ def setup(argv: list[str] | None = None) -> None:
         "--track-history", action="store_true", help="Allow .pam conversation history in Git"
     )
     args = parser.parse_args(argv)
+
+    if args.project is None and args.workspace is None:
+        _setup_identity(args)
+        return
 
     print("Pam setup\n")
     print(
@@ -202,6 +253,7 @@ def setup(argv: list[str] | None = None) -> None:
     )
 
     _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
+    _write_identity(state_dir, user_id)
     try:
         _write_config(
             config_path,
@@ -231,6 +283,68 @@ def setup(argv: list[str] | None = None) -> None:
     install(state_dir)
     print("\nPam is ready. Send a text or voice message here:")
     print(f"  {channel_url}")
+
+
+def project_add(argv: list[str] | None = None) -> None:
+    parser = argparse.ArgumentParser(description="Connect another project to Pam")
+    parser.add_argument("project", type=Path)
+    parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
+    history = parser.add_mutually_exclusive_group()
+    history.add_argument("--ignore-history", action="store_true")
+    history.add_argument("--track-history", action="store_true")
+    parser.add_argument("--no-service", action="store_true")
+    args = parser.parse_args(argv)
+    state_dir = args.state_dir.expanduser().resolve()
+    identity_path = state_dir / "identity.json"
+    env_path = state_dir / ".env"
+    if not identity_path.exists() or not env_path.exists():
+        raise SystemExit("Run `./pam setup` once before adding a project.")
+    identity = json.loads(identity_path.read_text(encoding="utf-8"))
+    user_id = _positive_id(str(identity["discord_user_id"]), "Discord user ID")
+    token = str(dotenv_values(env_path).get("DISCORD_BOT_TOKEN") or "")
+    if not token:
+        raise SystemExit("Discord bot token is missing")
+    workspace = args.project.expanduser().resolve()
+    if not workspace.is_dir():
+        raise SystemExit(f"Project directory does not exist: {workspace}")
+    config_path = state_dir / "config.toml"
+    if config_path.exists():
+        existing = load_config(config_path)
+        if any(item.workspace == workspace for item in existing.guilds.values()):
+            raise SystemExit(f"Project is already connected: {workspace}")
+    if args.ignore_history or args.track_history:
+        ignore_history = args.ignore_history
+    else:
+        answer = _ask("Keep conversation history out of Git? (Y/n)", "Y").lower()
+        if answer not in {"y", "yes", "n", "no"}:
+            raise SystemExit("Please answer Y or n")
+        ignore_history = answer in {"y", "yes"}
+    channel_id, guild_id, channel_url = _prepare_discord_workspace(
+        token, workspace, channel_id=None, guild_id=None, channel_name=None
+    )
+    if config_path.exists():
+        with config_path.open("a", encoding="utf-8") as handle:
+            handle.write(_project_config_block(channel_id, guild_id, workspace))
+    else:
+        _write_config(
+            config_path,
+            state_dir=state_dir,
+            user_id=user_id,
+            channel_id=channel_id,
+            guild_id=guild_id,
+            workspace=workspace,
+        )
+    _configure_project_archive_git(workspace, ignore=ignore_history)
+    print(f"\nProject connected: {workspace}")
+    print(f"Discord: {channel_url}")
+    if args.no_service:
+        return
+    from .service import install, restart
+
+    if len(load_config(config_path).guilds) == 1:
+        install(state_dir)
+    else:
+        restart(state_dir)
 
 
 def _check_codex(binary: str) -> tuple[bool, str]:

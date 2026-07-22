@@ -4,7 +4,8 @@ import sys
 
 from . import bot
 from .service import service
-from .setup import DEFAULT_STATE_DIR, doctor, setup
+from .shared_cli import codex, link
+from .setup import DEFAULT_STATE_DIR, doctor, project_add, setup
 
 
 def main() -> None:
@@ -15,8 +16,17 @@ def main() -> None:
     if args and args[0] == "doctor":
         doctor(args[1:])
         return
+    if len(args) >= 2 and args[0] == "project" and args[1] == "add":
+        project_add(args[2:])
+        return
     if args and args[0] == "service":
         service(args[1:])
+        return
+    if args and args[0] == "codex":
+        codex(args[1:])
+        return
+    if args and args[0] == "link":
+        link(args[1:])
         return
     if args and args[0] == "run":
         run_args = args[1:]
@@ -32,12 +42,15 @@ def main() -> None:
         return
     if args and args[0] in {"-h", "--help"}:
         print(
-            "Pam connects a Discord channel to a local project and Codex session.\n\n"
+            "Pam connects Discord to Codex sessions on this remote computer.\n\n"
             "Commands:\n"
-            "  pam-discord setup   Guided first-time setup\n"
-            "  pam-discord doctor  Check configuration, Discord secret, and Codex\n"
-            "  pam-discord run     Start Pam\n\n"
-            "  pam-discord service Keep Pam running in the background\n\n"
+            "  pam setup             Save your Discord identity and bot token once\n"
+            "  pam project add PATH  Connect another project and Discord server\n"
+            "  pam codex [OPTIONS]   Start a terminal and Discord shared session\n"
+            "  pam link              Link the latest Codex conversation in this directory\n"
+            "  pam doctor            Check configuration, Discord, and Codex\n"
+            "  pam service           Manage the background service\n"
+            "  pam run               Run Pam in the foreground\n\n"
             "Existing usage without 'run' remains supported."
         )
         return
