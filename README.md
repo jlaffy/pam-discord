@@ -2,6 +2,12 @@
 
 Talk or type to Codex from Discord. Pam runs Codex on your remote computer.
 
+```text
+remote access       → work through Discord from anywhere
+complete records    → save every project conversation neatly
+session continuity  → continue the same work in Discord or the terminal
+```
+
 ## Start here
 
 ### 1. Install
@@ -57,16 +63,15 @@ Follow the terminal instructions. Pam gives you links to:
 
 Pam prints a Discord link to `#general`. Open it and send your first message.
 
-### Planned: start a linked Codex session directly
+### Planned: link Codex work started directly on the remote machine
 
 ```bash
 pam codex
 ```
 
-If the project is not connected yet, Pam guides you through creating its Discord server and adding
-the bot before Codex starts. After that first time, the command opens immediately and creates the
-session's Discord thread. Normal Codex options still work—for example, `pam codex --yolo`. The
-normal `codex` command remains unchanged.
+Use `pam codex` when you have direct terminal access. Pam records the conversation and makes the
+same session available in Discord. If the project is not connected yet, Pam first guides you through
+creating its Discord server. Normal Codex options still work—for example, `pam codex --yolo`.
 
 ## Done
 
