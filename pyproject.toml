@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pam-discord"
 version = "0.2.0"
-description = "A local-first Discord voice inbox for Codex"
+description = "Talk or type to Codex from Discord on your remote computer"
 requires-python = ">=3.11"
 dependencies = [
   "discord.py>=2.4,<3",
