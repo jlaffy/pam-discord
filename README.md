@@ -44,7 +44,9 @@ Pam then prints the direct Discord link. Send a text or voice message there and 
 For voice messages, Pam posts the transcription into the same thread before Codex replies.
 
 One project directory corresponds to one project-specific Discord server. Later, that server can
-have more channels mapped to project subdirectories. Each Discord thread is one Codex session.
+have as many channels as you want: every new channel works automatically from the project root.
+Optional channel mappings can point selected channels at project subdirectories. Each Discord
+thread is one Codex session.
 Setup needs SSH once; afterward Pam uses outbound encrypted connections to Discord, needs no public
 inbound port, and keeps running when you disconnect.
 

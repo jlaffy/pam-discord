@@ -18,6 +18,7 @@ class Config:
     archive_dir: Path
     allowed_user_ids: frozenset[int]
     channels: dict[int, ChannelConfig]
+    guilds: dict[int, ChannelConfig]
     max_attachment_bytes: int
     max_audio_seconds: int
     whisper_model: str
@@ -55,8 +56,25 @@ def load_config(path: Path) -> Config:
             instruction_prefix=str(item.get("instruction_prefix", "")).strip(),
             project_record_dir=record_dir,
         )
-    if not channels:
-        raise ValueError("at least one [channels.\"ID\"] mapping is required")
+    guilds: dict[int, ChannelConfig] = {}
+    for guild_id, item in raw.get("guilds", {}).items():
+        workspace = Path(item["workspace"]).expanduser().resolve()
+        if not workspace.is_dir():
+            raise ValueError(f"workspace for server {guild_id} is not a directory: {workspace}")
+        record_value = item.get("project_record_dir")
+        record_dir = (workspace / str(record_value)).resolve() if record_value else None
+        if record_dir is not None and not record_dir.is_relative_to(workspace):
+            raise ValueError(
+                f"project_record_dir for server {guild_id} must stay inside its workspace"
+            )
+        guilds[int(guild_id)] = ChannelConfig(
+            workspace=workspace,
+            run_codex=bool(item.get("run_codex", False)),
+            instruction_prefix=str(item.get("instruction_prefix", "")).strip(),
+            project_record_dir=record_dir,
+        )
+    if not channels and not guilds:
+        raise ValueError("at least one Discord server or channel mapping is required")
 
     max_mb = int(raw.get("max_attachment_mb", 25))
     max_seconds = int(raw.get("max_audio_seconds", 1800))
@@ -67,6 +85,7 @@ def load_config(path: Path) -> Config:
         archive_dir=Path(raw.get("archive_dir", "./archive")).expanduser().resolve(),
         allowed_user_ids=allowed,
         channels=channels,
+        guilds=guilds,
         max_attachment_bytes=max_mb * 1024 * 1024,
         max_audio_seconds=max_seconds,
         whisper_model=str(raw.get("whisper_model", "small.en")),

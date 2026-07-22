@@ -10,12 +10,15 @@ whisper_compute_type = "int8"
 codex_binary = "codex"
 codex_timeout_seconds = 1800
 
-[channels."234567890123456789"]
+[guilds."234567890123456789"]
 workspace = "/absolute/path/to/agent-native-genomics"
 run_codex = true
 instruction_prefix = "Follow this project's instructions. Treat this as formal project work."
-project_record_dir = "prompts/conversations"
+project_record_dir = ".pam/conversations"
 
+# Optional: override one channel to use a project subdirectory.
 [channels."345678901234567890"]
-workspace = "/absolute/path/to/personal"
-run_codex = false
+workspace = "/absolute/path/to/agent-native-genomics/papers"
+run_codex = true
+instruction_prefix = "Work in the papers area of this project."
+project_record_dir = ".pam/conversations"

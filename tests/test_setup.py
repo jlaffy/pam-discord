@@ -46,6 +46,8 @@ def test_setup_creates_private_single_project_configuration(
     assert config.channels[222].workspace == workspace
     assert config.channels[222].run_codex is True
     assert config.channels[222].project_record_dir == workspace / ".pam" / "conversations"
+    assert config.guilds[333].workspace == workspace
+    assert config.guilds[333].project_record_dir == workspace / ".pam" / "conversations"
     assert (workspace / ".gitignore").read_text() == ".pam/\n"
     assert (state_dir / ".env").read_text() == "DISCORD_BOT_TOKEN=private-token\n"
     assert stat.S_IMODE((state_dir / ".env").stat().st_mode) == 0o600
@@ -137,7 +139,10 @@ def test_doctor_checks_generated_state(
     )
     monkeypatch.setattr(
         "pam_discord.setup._check_discord",
-        lambda _token, channels: (True, f"connected; {len(channels)} channel(s) accessible"),
+        lambda _token, channels, guilds: (
+            True,
+            f"connected; {len(guilds)} server(s), {len(channels)} channel(s)",
+        ),
     )
 
     doctor(["--state-dir", str(state_dir)])

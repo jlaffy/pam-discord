@@ -94,8 +94,9 @@ class PamDiscord(discord.Client):
 
     async def on_ready(self) -> None:
         LOG.info(
-            "connected as %s; listening in %d mapped channel(s)",
+            "connected as %s; listening in %d project server(s) and %d channel override(s)",
             self.user,
+            len(self.config.guilds),
             len(self.config.channels),
         )
 
@@ -103,7 +104,12 @@ class PamDiscord(discord.Client):
         channel_id = getattr(channel, "id", None)
         if isinstance(channel, discord.Thread):
             channel_id = channel.parent_id
-        return self.config.channels.get(channel_id)
+        channel_config = self.config.channels.get(channel_id)
+        if channel_config is not None:
+            return channel_config
+        guild = getattr(channel, "guild", None)
+        guild_id = getattr(guild, "id", None)
+        return self.config.guilds.get(guild_id)
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.author.id not in self.config.allowed_user_ids:

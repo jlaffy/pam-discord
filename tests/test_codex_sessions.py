@@ -15,6 +15,7 @@ def _bot(tmp_path: Path) -> PamDiscord:
             archive_dir=tmp_path / "archive",
             allowed_user_ids=frozenset({1}),
             channels={},
+            guilds={},
             max_attachment_bytes=1024,
             max_audio_seconds=60,
             whisper_model="tiny.en",
