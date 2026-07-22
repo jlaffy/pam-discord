@@ -10,6 +10,7 @@ import re
 import shutil
 import subprocess
 import socket
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -103,6 +104,30 @@ def _enable_session_polling(workspace: Path, codex_thread_id: str) -> None:
     _write_json(path, sorted(sessions))
 
 
+def _disable_session_polling(workspace: Path, codex_thread_id: str) -> None:
+    sessions = _load_polled_sessions(workspace)
+    if codex_thread_id not in sessions:
+        return
+    sessions.remove(codex_thread_id)
+    _write_json(_polled_sessions_path(workspace), sorted(sessions))
+
+
+def _recently_mirrored(
+    cache: dict[tuple[str, str, str], float],
+    key: tuple[str, str, str],
+    now: float,
+    *,
+    window_seconds: float = 15,
+) -> bool:
+    expired = [item for item, timestamp in cache.items() if now - timestamp > window_seconds]
+    for item in expired:
+        cache.pop(item, None)
+    if key in cache:
+        return True
+    cache[key] = now
+    return False
+
+
 def _acquire_instance_lock(path: Path | None) -> None:
     if path is None:
         return
@@ -141,6 +166,7 @@ class PamDiscord(discord.Client):
         self._model: WhisperModel | None = None
         self._model_lock = asyncio.Lock()
         self._conversation_locks: dict[int, asyncio.Lock] = {}
+        self._recent_mirrors: dict[tuple[str, str, str], float] = {}
         self._app_server = CodexAppServer(
             self.config.codex_app_server_url, self._handle_app_server_notification
         )
@@ -444,10 +470,20 @@ class PamDiscord(discord.Client):
                 await self._link_started_codex_thread(thread_value)
                 self._record_app_server_event(str(thread_value.get("id") or ""), event)
         elif method == "item/completed":
-            self._record_app_server_event(str(params.get("threadId") or ""), event)
+            codex_thread_id = str(params.get("threadId") or "")
+            self._stop_polling_live_session(codex_thread_id)
+            self._record_app_server_event(codex_thread_id, event)
             await self._mirror_completed_codex_item(params)
         else:
             self._record_app_server_event(str(params.get("threadId") or ""), event)
+
+    def _stop_polling_live_session(self, codex_thread_id: str) -> None:
+        if not codex_thread_id:
+            return
+        for channel_config in self.config.guilds.values():
+            if codex_thread_id in load_shared_sessions(channel_config.workspace):
+                _disable_session_polling(channel_config.workspace, codex_thread_id)
+                return
 
     def _record_app_server_event(
         self, codex_thread_id: str, event: dict[str, object]
@@ -619,6 +655,13 @@ class PamDiscord(discord.Client):
             else:
                 return
             if not text:
+                return
+            mirror_key = (codex_thread_id, str(item_type), text)
+            if _recently_mirrored(self._recent_mirrors, mirror_key, time.monotonic()):
+                if item_id and imported_path is not None:
+                    imported.add(item_id)
+                    imported_path.parent.mkdir(parents=True, exist_ok=True)
+                    _write_json(imported_path, sorted(imported))
                 return
             if record_dir is not None:
                 conversation_dir = record_dir / str(discord_thread_id)

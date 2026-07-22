@@ -6,7 +6,14 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from pam_discord.bot import PamDiscord, _deliverable_paths, _enable_session_polling
+from pam_discord.bot import (
+    PamDiscord,
+    _deliverable_paths,
+    _disable_session_polling,
+    _enable_session_polling,
+    _load_polled_sessions,
+    _recently_mirrored,
+)
 from pam_discord.app_server import save_shared_sessions
 from pam_discord.config import ChannelConfig, Config
 
@@ -97,6 +104,25 @@ def test_normal_shared_sessions_are_not_polled(tmp_path: Path) -> None:
     asyncio.run(bot._sync_shared_sessions())
 
     assert imported == []
+
+
+def test_live_events_disable_compatibility_polling(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    _enable_session_polling(workspace, "thread-1")
+
+    _disable_session_polling(workspace, "thread-1")
+
+    assert _load_polled_sessions(workspace) == set()
+
+
+def test_recent_mirror_content_is_deduplicated_across_different_item_ids() -> None:
+    cache: dict[tuple[str, str, str], float] = {}
+    key = ("thread-1", "agentMessage", "same response")
+
+    assert _recently_mirrored(cache, key, 10) is False
+    assert _recently_mirrored(cache, key, 12) is True
+    assert _recently_mirrored(cache, key, 30) is False
 
 
 def test_deliverables_are_limited_to_supported_project_files(tmp_path: Path) -> None:
