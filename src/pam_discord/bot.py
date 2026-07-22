@@ -22,6 +22,11 @@ from .config import ChannelConfig, Config, load_config
 
 LOG = logging.getLogger("pam_discord")
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
+DELIVERABLE_EXTENSIONS = {
+    ".csv", ".docx", ".gif", ".html", ".jpeg", ".jpg", ".md", ".pdf",
+    ".png", ".ppt", ".pptx", ".svg", ".tsv", ".txt", ".webp", ".xls",
+    ".xlsx", ".zip",
+}
 
 
 def _safe_name(value: str) -> str:
@@ -49,6 +54,34 @@ def _append_jsonl(path: Path, value: object) -> None:
 def _append_markdown(path: Path, heading: str, body: str) -> None:
     with path.open("a", encoding="utf-8") as handle:
         handle.write(f"## {heading}\n\n{body.strip()}\n\n")
+
+
+def _deliverable_paths(text: str, workspace: Path) -> list[Path]:
+    candidates = re.findall(r"\]\(([^)\n]+)\)|`([^`\n]+)`", text)
+    paths: list[Path] = []
+    seen: set[Path] = set()
+    for pair in candidates:
+        raw = next((value for value in pair if value), "").strip().strip("<>")
+        raw = re.sub(r":\d+(?::\d+)?$", "", raw)
+        if not raw or "://" in raw:
+            continue
+        candidate = Path(raw).expanduser()
+        candidate = candidate if candidate.is_absolute() else workspace / candidate
+        try:
+            resolved = candidate.resolve()
+        except OSError:
+            continue
+        if (
+            resolved in seen
+            or resolved.suffix.lower() not in DELIVERABLE_EXTENSIONS
+            or not resolved.is_file()
+            or not resolved.is_relative_to(workspace)
+            or resolved.is_relative_to(workspace / ".pam")
+        ):
+            continue
+        seen.add(resolved)
+        paths.append(resolved)
+    return paths
 
 
 def _polled_sessions_path(workspace: Path) -> Path:
@@ -321,6 +354,12 @@ class PamDiscord(discord.Client):
                     },
                 )
                 await self._send_chunks(thread, f"**Codex**\n{output}")
+                await self._send_deliverables(
+                    thread,
+                    output,
+                    channel_config.workspace,
+                    project_record[0] if project_record is not None else conversation_dir,
+                )
                 if project_record is not None:
                     project_conversation_dir, project_message_dir = project_record
                     shutil.copytree(record_dir, project_message_dir, dirs_exist_ok=True)
@@ -599,6 +638,13 @@ class PamDiscord(discord.Client):
                     text,
                 )
             await self._send_chunks(discord_thread, f"**{label}**\n{text}")
+            if role == "agent":
+                await self._send_deliverables(
+                    discord_thread,
+                    text,
+                    channel_config.workspace,
+                    record_dir / str(discord_thread_id) if record_dir is not None else None,
+                )
             if item_id and imported_path is not None:
                 imported.add(item_id)
                 imported_path.write_text(
@@ -698,6 +744,37 @@ class PamDiscord(discord.Client):
     async def _send_chunks(channel: discord.abc.Messageable, text: str) -> None:
         for offset in range(0, len(text), 1900):
             await channel.send(text[offset : offset + 1900])
+
+    async def _send_deliverables(
+        self,
+        channel: discord.abc.Messageable,
+        text: str,
+        workspace: Path,
+        conversation_dir: Path | None,
+    ) -> None:
+        sent_path = conversation_dir / "sent-attachments.json" if conversation_dir else None
+        sent = set()
+        if sent_path is not None and sent_path.exists():
+            sent = set(json.loads(sent_path.read_text(encoding="utf-8")))
+        guild = getattr(channel, "guild", None)
+        size_limit = int(getattr(guild, "filesize_limit", 10 * 1024 * 1024))
+        for path in _deliverable_paths(text, workspace):
+            stat = path.stat()
+            fingerprint = f"{path}:{stat.st_size}:{stat.st_mtime_ns}"
+            if fingerprint in sent:
+                continue
+            if stat.st_size > size_limit:
+                await channel.send(
+                    f"**Pam** · `{path.name}` is too large for this Discord server "
+                    f"({stat.st_size / 1024 / 1024:.1f} MB). Saved at `{path}`."
+                )
+                sent.add(fingerprint)
+            else:
+                await channel.send(file=discord.File(path, filename=path.name))
+                sent.add(fingerprint)
+            if sent_path is not None:
+                sent_path.parent.mkdir(parents=True, exist_ok=True)
+                _write_json(sent_path, sorted(sent))
 
 
 def main(argv: list[str] | None = None) -> None:

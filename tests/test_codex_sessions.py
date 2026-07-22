@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from pam_discord.bot import PamDiscord, _enable_session_polling
+from pam_discord.bot import PamDiscord, _deliverable_paths, _enable_session_polling
 from pam_discord.app_server import save_shared_sessions
 from pam_discord.config import ChannelConfig, Config
 
@@ -97,3 +97,19 @@ def test_normal_shared_sessions_are_not_polled(tmp_path: Path) -> None:
     asyncio.run(bot._sync_shared_sessions())
 
     assert imported == []
+
+
+def test_deliverables_are_limited_to_supported_project_files(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    plot = workspace / "results" / "plot.png"
+    plot.parent.mkdir()
+    plot.write_bytes(b"png")
+    secret = tmp_path / "secret.pdf"
+    secret.write_bytes(b"secret")
+    source = workspace / "analysis.py"
+    source.write_text("pass\n")
+
+    text = f"See [plot]({plot}) and `{secret}` and `{source}` and [plot again]({plot}:12)."
+
+    assert _deliverable_paths(text, workspace) == [plot]

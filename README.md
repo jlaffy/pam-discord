@@ -9,6 +9,7 @@ Codex conversation from your phone.
 remote access       → reach your remote server and Codex through Discord on your phone or computer
 complete records    → prompts and conversation transcripts saved from audio or text
 shared sessions     → continue in the terminal or Discord
+file delivery       → receive generated plots, presentations, documents, and tables in Discord
 ```
 
 ## Start here
@@ -91,6 +92,8 @@ Pam stays running after you disconnect. Conversation history is saved in
 Pam runs Discord-started Codex work with full local access by default, equivalent to
 `codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user
 running Pam. Set `codex_full_access = false` in Pam's `config.toml` to use Codex's normal sandbox.
+When Codex links to a supported file inside the project, Pam uploads it to the conversation thread.
+Files over the Discord server's upload limit stay on the remote machine and Pam reports their path.
 
 ## Help
 
