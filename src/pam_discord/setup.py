@@ -147,6 +147,7 @@ def setup(argv: list[str] | None = None) -> None:
         print(f"  pam-discord doctor --state-dir {_toml_string(str(state_dir))}")
         print(f"  pam-discord run --env-file {env_path} --config {config_path}")
     print("\nThen send a harmless test message in the mapped Discord channel.")
+    print("When the test works, keep Pam online with: pam-discord service install")
 
 
 def _check_codex(binary: str) -> tuple[bool, str]:
@@ -241,3 +242,4 @@ def doctor(argv: list[str] | None = None) -> None:
         print("pam-discord run")
     else:
         print(f"pam-discord run --env-file {env_path} --config {config_path}")
+    print("After the interactive test works: pam-discord service install")

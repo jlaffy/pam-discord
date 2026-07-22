@@ -120,6 +120,32 @@ Send a harmless first message in the mapped channel, such as: “Read this proje
 summarize it without changing files.” Pam creates a Discord thread for the task; follow-ups inside
 that thread resume the same Codex session.
 
+### 5. Keep Pam online
+
+Use `./pam run` for the first interactive test so you can see errors directly. Once that works, on
+a Linux server run:
+
+```bash
+./pam service install
+```
+
+Pam validates the setup again, installs a private user-level `systemd` service, starts it
+immediately, enables automatic startup, and restarts it after failures. It also tells you if Linux
+user lingering must be enabled so Pam remains online after you end the SSH session.
+
+Common service commands are:
+
+```bash
+./pam service status
+./pam service logs
+./pam service restart
+./pam service stop
+./pam service start
+```
+
+`./pam service uninstall` removes only the background service. It keeps configuration, session
+history, transcripts, and recordings.
+
 ## Manual configuration
 
 For additional workspaces or manual setup, copy the examples:

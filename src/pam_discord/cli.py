@@ -3,6 +3,7 @@ from __future__ import annotations
 import sys
 
 from . import bot
+from .service import service
 from .setup import DEFAULT_STATE_DIR, doctor, setup
 
 
@@ -13,6 +14,9 @@ def main() -> None:
         return
     if args and args[0] == "doctor":
         doctor(args[1:])
+        return
+    if args and args[0] == "service":
+        service(args[1:])
         return
     if args and args[0] == "run":
         run_args = args[1:]
@@ -33,6 +37,7 @@ def main() -> None:
             "  pam-discord setup   Guided first-time setup\n"
             "  pam-discord doctor  Check configuration, Discord secret, and Codex\n"
             "  pam-discord run     Start Pam\n\n"
+            "  pam-discord service Keep Pam running in the background\n\n"
             "Existing usage without 'run' remains supported."
         )
         return
