@@ -29,22 +29,18 @@ codex login
 
 ### 2. Make the Discord bot
 
-- Open [Discord Developer Portal](https://discord.com/developers/applications).
-- Click **New Application**.
-- Name it `Pam`.
-- Click **Create**.
+- Open the [Discord Developer Portal](https://discord.com/developers/applications) and click
+  **New Application**.
+- Name it `Pam` and click **Create**.
 - Click **Bot** on the left.
 - Turn on **Message Content Intent**.
-- Click **Reset Token**.
-- Click **Copy**. Do not share this token.
+- Under **Token**, click **Reset Token**, then **Copy**. Do not share this token.
 
 ### 3. Copy your Discord user ID
 
-- Open Discord.
-- Go to **User Settings → Advanced**.
+- Open Discord and go to **User Settings → Advanced**.
 - Turn on **Developer Mode**.
-- Right-click your own name or picture.
-- Click **Copy User ID**.
+- Right-click your own name or picture and click **Copy User ID**.
 
 ### 4. Connect your project
 
