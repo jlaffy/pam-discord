@@ -6,7 +6,7 @@ Pam is being built for terminal and Discord shared sessions, so you can continue
 conversation from your phone.
 
 ```text
-remote access       → always reach your remote server and Codex through Discord
+remote access       → reach your remote server and Codex through Discord on your phone or computer
 complete records    → prompts and conversation transcripts saved from audio or text
 shared sessions     → continue in the terminal or Discord
 ```
