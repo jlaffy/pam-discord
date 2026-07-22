@@ -1,15 +1,12 @@
 # Pam
 
-Pam gives you an always-on connection to Codex on a remote machine through Discord—using text or
-voice from your phone or computer. Each Discord thread keeps its own Codex session, and Pam saves
-the conversation.
+Talk or type to Codex from Discord. Pam runs Codex on your remote computer.
 
-## Set up in a few minutes
-
-You need Python 3.11+, a Discord server, and the
-[Codex CLI](https://developers.openai.com/codex/cli/).
+## Start here
 
 ### 1. Install
+
+Open a terminal on the remote computer. Paste:
 
 ```bash
 git clone https://github.com/jlaffy/pam-discord.git
@@ -18,53 +15,71 @@ cd pam-discord
 codex login
 ```
 
-### 2. Create a Discord bot
+### 2. Make the Discord bot
 
-Open the [Discord Developer Portal](https://discord.com/developers/applications):
+- Open [Discord Developer Portal](https://discord.com/developers/applications).
+- Click **New Application**.
+- Name it `Pam`.
+- Click **Create**.
+- Click **Bot** on the left.
+- Turn on **Message Content Intent**.
+- Click **Reset Token**.
+- Click **Copy**. Do not share this token.
 
-1. Create an application and add a bot.
-2. Enable **Message Content Intent**.
-3. Copy the bot token.
+### 3. Copy your Discord user ID
 
-In Discord, enable **User Settings → Advanced → Developer Mode**, right-click your profile, and
-copy your user ID.
+- Open Discord.
+- Go to **User Settings → Advanced**.
+- Turn on **Developer Mode**.
+- Right-click your own name or picture.
+- Click **Copy User ID**.
 
-### 3. Let Pam finish
+### 4. Connect your project
 
-```bash
-./pam setup /path/to/project
-```
-
-Pam asks for your Discord user ID and hidden bot token, then links you to create a new Discord
-server for the project. After you click **Create**, Pam gives you its bot-install link. It connects
-that server's `#general` channel to the project directory, checks Codex, and starts its background
-service.
-
-Pam then prints the direct Discord link. Send a text or voice message there and you are ready.
-For voice messages, Pam posts the transcription into the same thread before Codex replies.
-
-One project directory corresponds to one project-specific Discord server. Later, that server can
-have as many channels as you want: every new channel works automatically from the project root.
-Optional channel mappings can point selected channels at project subdirectories. Each Discord
-thread is one Codex session.
-Setup needs SSH once; afterward Pam uses outbound encrypted connections to Discord, needs no public
-inbound port, and keeps running when you disconnect.
-
-## Useful commands
+Replace the example path with your project directory:
 
 ```bash
-./pam doctor            # check the setup
-./pam service status    # is Pam running?
-./pam service logs      # recent activity and errors
-./pam service restart   # restart Pam
-./pam service stop      # stop Pam
-./pam service start     # start Pam
+./pam setup /ewsc/jlaffy/agent-native-genomics
 ```
 
-Pam only accepts configured users and channels and only works in configured project directories.
-Every thread's messages, exact prompts, Codex replies, metadata, transcripts, and original audio are
-kept under `.pam/conversations/` in the project. Setup adds `.pam/` to the project's `.gitignore`,
-so this complete local history is not accidentally committed. Private service state and tokens stay
-under `~/.local/share/pam-discord`.
+Pam asks for:
+
+```text
+Discord user ID  → paste the ID from step 3
+Discord bot token → paste the token from step 2
+```
+
+Then:
+
+- Open Pam's **create server** link.
+- Create the new project server.
+- Return to the terminal and press **Enter**.
+- Open Pam's **install bot** link.
+- Choose the new project server.
+- Click **Authorize**.
+- Return to the terminal and press **Enter**.
+- Open the final Discord channel link.
+- Send a message.
+
+## Done
+
+```text
+Discord server = your project
+channel        = project conversation area
+thread         = persistent Codex session
+voice message  = saved audio + transcript + Codex request
+```
+
+Pam stays running after you disconnect. Conversation history is saved in
+`<project>/.pam/conversations/` and ignored by Git.
+
+## Help
+
+```bash
+./pam doctor
+./pam service status
+./pam service logs
+./pam service restart
+```
 
 MIT licensed.
