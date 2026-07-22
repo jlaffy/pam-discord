@@ -97,9 +97,18 @@ project_record_dir = ".pam/conversations"
     _write_private(path, content)
 
 
-def _ignore_project_archive(workspace: Path) -> None:
+def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
     path = workspace / ".gitignore"
     marker = ".pam/"
+    if not ignore:
+        if not path.exists():
+            return
+        lines = path.read_text(encoding="utf-8").splitlines()
+        filtered = [line for line in lines if line.strip() != marker]
+        if filtered != lines:
+            content = "\n".join(filtered)
+            path.write_text(f"{content}\n" if content else "", encoding="utf-8")
+        return
     if path.exists():
         content = path.read_text(encoding="utf-8")
         if any(line.strip() == marker for line in content.splitlines()):
@@ -123,6 +132,13 @@ def setup(argv: list[str] | None = None) -> None:
     parser.add_argument("--channel-name")
     parser.add_argument(
         "--no-service", action="store_true", help="Configure Pam without installing systemd"
+    )
+    history = parser.add_mutually_exclusive_group()
+    history.add_argument(
+        "--ignore-history", action="store_true", help="Add .pam conversation history to .gitignore"
+    )
+    history.add_argument(
+        "--track-history", action="store_true", help="Allow .pam conversation history in Git"
     )
     args = parser.parse_args(argv)
 
@@ -161,6 +177,13 @@ def setup(argv: list[str] | None = None) -> None:
     user_id = _positive_id(
         str(args.user_id or _ask("Your Discord user ID")), "Discord user ID"
     )
+    if args.ignore_history or args.track_history:
+        ignore_history = args.ignore_history
+    else:
+        answer = _ask("Keep conversation history out of Git? (Y/n)", "Y").lower()
+        if answer not in {"y", "yes", "n", "no"}:
+            raise SystemExit("Please answer Y or n")
+        ignore_history = answer in {"y", "yes"}
     token = getpass.getpass("Discord bot token (hidden): ").strip()
     if not token:
         raise SystemExit("Discord bot token is required")
@@ -188,7 +211,7 @@ def setup(argv: list[str] | None = None) -> None:
             guild_id=guild_id,
             workspace=workspace,
         )
-        _ignore_project_archive(workspace)
+        _configure_project_archive_git(workspace, ignore=ignore_history)
     except Exception:
         env_path.unlink(missing_ok=True)
         raise
@@ -198,6 +221,7 @@ def setup(argv: list[str] | None = None) -> None:
     print(f"  Project:   {workspace}")
     print(f"  Discord:   {channel_url}")
     print(f"  Server ID: {guild_id}")
+    print(f"  Git:       conversation history {'ignored' if ignore_history else 'trackable'}")
     if args.no_service:
         print("\nPam is configured but not running. Start it with: pam-discord run")
         return

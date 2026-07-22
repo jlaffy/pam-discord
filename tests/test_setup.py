@@ -38,6 +38,7 @@ def test_setup_creates_private_single_project_configuration(
             "--channel-id",
             "222",
             "--no-service",
+            "--ignore-history",
         ]
     )
 
@@ -75,6 +76,7 @@ def test_setup_preserves_gitignore_and_adds_pam_once(
             "--user-id",
             "111",
             "--no-service",
+            "--ignore-history",
         ]
     )
 
@@ -132,6 +134,7 @@ def test_doctor_checks_generated_state(
             "--channel-id",
             "222",
             "--no-service",
+            "--ignore-history",
         ]
     )
     monkeypatch.setattr(
@@ -197,6 +200,43 @@ def test_setup_installs_service_by_default(tmp_path: Path, monkeypatch: pytest.M
     )
     monkeypatch.setattr("pam_discord.service.install", installed.append)
 
-    setup([str(workspace), "--state-dir", str(state_dir), "--user-id", "111"])
+    setup(
+        [
+            str(workspace),
+            "--state-dir",
+            str(state_dir),
+            "--user-id",
+            "111",
+            "--ignore-history",
+        ]
+    )
 
     assert installed == [state_dir.resolve()]
+
+
+def test_setup_can_make_conversation_history_trackable(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    ignore = workspace / ".gitignore"
+    ignore.write_text("data/\n.pam/\n")
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+
+    setup(
+        [
+            str(workspace),
+            "--state-dir",
+            str(tmp_path / "pam-state"),
+            "--user-id",
+            "111",
+            "--track-history",
+            "--no-service",
+        ]
+    )
+
+    assert ignore.read_text() == "data/\n"

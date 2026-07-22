@@ -47,14 +47,15 @@ Pam asks for:
 ```text
 Discord user ID  → paste the ID from step 3
 Discord bot token → paste the token from step 2
+Git history       → choose whether `.pam/` is ignored or can be committed
 ```
 
 Follow the terminal instructions. Pam gives you links to:
 
-1. Create the new project server.
-2. Add Pam to that server.
+1. Create a new Discord server for the project.
+2. Add Pam to the new Discord server.
 
-Finally, open the channel link Pam prints and send a message.
+Pam prints a Discord link to `#general`. Open it and send your first message.
 
 ## Done
 
@@ -66,15 +67,15 @@ voice message  = saved audio + transcript + Codex request
 ```
 
 Pam stays running after you disconnect. Conversation history is saved in
-`<project>/.pam/conversations/` and ignored by Git.
+`<project>/.pam/conversations/`. During setup, you choose whether Git ignores or tracks it.
 
 ## Help
 
 ```bash
-./pam doctor
-./pam service status
-./pam service logs
-./pam service restart
+./pam doctor            # check Discord, Codex, and project setup
+./pam service status    # check whether Pam is running
+./pam service logs      # show recent activity and errors
+./pam service restart   # restart Pam
 ```
 
 MIT licensed.
