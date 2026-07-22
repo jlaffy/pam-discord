@@ -54,13 +54,20 @@ def _remove_stale_instance_lock(state_dir: Path) -> None:
     try:
         pid = int(json.loads(owner_path.read_text(encoding="utf-8"))["pid"])
         os.kill(pid, 0)
-        return
     except (KeyError, ValueError, json.JSONDecodeError, OSError, ProcessLookupError):
-        owner_path.unlink(missing_ok=True)
-        try:
-            lock_dir.rmdir()
-        except OSError:
-            pass
+        pid = 0
+    command_path = Path(f"/proc/{pid}/cmdline")
+    owner_is_pam = False
+    if pid and command_path.exists():
+        command = command_path.read_bytes().replace(b"\0", b" ").decode(errors="replace")
+        owner_is_pam = "pam-discord" in command and str(state_dir / "config.toml") in command
+    if owner_is_pam:
+        return
+    owner_path.unlink(missing_ok=True)
+    try:
+        lock_dir.rmdir()
+    except OSError:
+        pass
 
 
 def _fallback_running(state_dir: Path) -> bool:
