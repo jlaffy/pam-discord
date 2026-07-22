@@ -46,6 +46,23 @@ def _fallback_metadata(state_dir: Path) -> Path:
     return state_dir / "background-service.json"
 
 
+def _remove_stale_instance_lock(state_dir: Path) -> None:
+    lock_dir = state_dir / "instance.lock"
+    owner_path = lock_dir / "owner.json"
+    if not owner_path.exists():
+        return
+    try:
+        pid = int(json.loads(owner_path.read_text(encoding="utf-8"))["pid"])
+        os.kill(pid, 0)
+        return
+    except (KeyError, ValueError, json.JSONDecodeError, OSError, ProcessLookupError):
+        owner_path.unlink(missing_ok=True)
+        try:
+            lock_dir.rmdir()
+        except OSError:
+            pass
+
+
 def _fallback_running(state_dir: Path) -> bool:
     path = _fallback_metadata(state_dir)
     if not path.exists():
@@ -65,6 +82,7 @@ def _fallback_running(state_dir: Path) -> bool:
 def _fallback_start(state_dir: Path, executable: Path | None = None) -> None:
     if _fallback_running(state_dir):
         return
+    _remove_stale_instance_lock(state_dir)
     metadata_path = _fallback_metadata(state_dir)
     previous = (
         json.loads(metadata_path.read_text(encoding="utf-8"))
@@ -115,6 +133,7 @@ def _fallback_stop(state_dir: Path) -> None:
         if not _fallback_running(state_dir):
             break
         time.sleep(0.1)
+    _remove_stale_instance_lock(state_dir)
 
 
 def _unit_quote(value: str) -> str:
