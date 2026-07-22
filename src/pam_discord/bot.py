@@ -110,7 +110,7 @@ def _acquire_instance_lock(path: Path | None) -> None:
         path.mkdir(parents=True, exist_ok=False)
     except FileExistsError as exc:
         raise SystemExit(
-            f"Pam already has an instance lock at {path}. "
+            f"pam already has an instance lock at {path}. "
             "Stop the other instance, or remove a confirmed stale lock."
         ) from exc
     _write_json(
@@ -490,7 +490,7 @@ class PamDiscord(discord.Client):
                                 await self._import_codex_history(thread_id)
                     path.unlink()
                 except Exception:
-                    LOG.exception("failed to process Pam link request %s", path)
+                    LOG.exception("failed to process pam link request %s", path)
             await self._sync_shared_sessions()
             await asyncio.sleep(2)
 
@@ -552,7 +552,7 @@ class PamDiscord(discord.Client):
                     "source": "terminal",
                 },
             )
-        await discord_thread.send("**Pam** · Shared terminal and Discord Codex session connected.")
+        await discord_thread.send("**pam** · Shared terminal and Discord Codex session connected.")
         await self._import_codex_history(codex_thread_id)
 
     async def _import_codex_history(self, codex_thread_id: str) -> None:
@@ -784,7 +784,7 @@ class PamDiscord(discord.Client):
                 continue
             if stat.st_size > size_limit:
                 await channel.send(
-                    f"**Pam** · `{path.name}` is too large for this Discord server "
+                    f"**pam** · `{path.name}` is too large for this Discord server "
                     f"({stat.st_size / 1024 / 1024:.1f} MB). Saved at `{path}`."
                 )
                 sent.add(fingerprint)
@@ -797,7 +797,7 @@ class PamDiscord(discord.Client):
 
 
 def main(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Run the Pam Discord agent bridge")
+    parser = argparse.ArgumentParser(description="Run the pam Discord agent bridge")
     parser.add_argument("--config", type=Path, default=Path("config.toml"))
     parser.add_argument(
         "--env-file",

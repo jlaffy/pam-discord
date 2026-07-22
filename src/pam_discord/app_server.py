@@ -39,7 +39,7 @@ class CodexAppServer:
             {
                 "clientInfo": {
                     "name": "pam_discord",
-                    "title": "Pam",
+                    "title": "pam",
                     "version": "0.2.0",
                 }
             },

@@ -176,13 +176,15 @@ def test_prepare_discord_workspace_uses_general_in_dedicated_server(
     calls: list[tuple[str, str, object]] = []
     monkeypatch.setattr(
         "pam_discord.setup._discord_get",
-        lambda _token, _path: {"id": "999", "username": "Pam"},
+        lambda _token, _path: {"id": "999", "username": "pam"},
     )
 
     def request(_token: str, path: str, *, method: str = "GET", payload=None):
         calls.append((path, method, payload))
         if path == "/users/@me/guilds":
             return [{"id": "333", "name": "Research"}]
+        if path == "/guilds/333/members/@me" and method == "PATCH":
+            return {"nick": "pam"}
         if path == "/guilds/333/channels" and method == "GET":
             return [{"id": "555", "name": "general", "type": 0}]
         raise AssertionError((path, method, payload))
@@ -194,7 +196,8 @@ def test_prepare_discord_workspace_uses_general_in_dedicated_server(
     )
 
     assert result == (555, 333, "https://discord.com/channels/333/555")
-    assert calls[1] == ("/guilds/333/channels", "GET", None)
+    assert calls[1] == ("/guilds/333/members/@me", "PATCH", {"nick": "pam"})
+    assert calls[2] == ("/guilds/333/channels", "GET", None)
 
 
 def test_setup_installs_service_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

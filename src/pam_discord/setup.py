@@ -142,14 +142,14 @@ def _write_identity(state_dir: Path, user_id: int) -> None:
 def _setup_identity(args: argparse.Namespace) -> None:
     state_dir = (
         args.state_dir
-        or Path(_ask("Pam data directory", str(DEFAULT_STATE_DIR.expanduser())))
+        or Path(_ask("pam data directory", str(DEFAULT_STATE_DIR.expanduser())))
     ).expanduser().resolve()
     state_dir.mkdir(parents=True, exist_ok=True)
     state_dir.chmod(stat.S_IRWXU)
     env_path = state_dir / ".env"
     identity_path = state_dir / "identity.json"
     if env_path.exists() or identity_path.exists():
-        raise SystemExit("Pam is already set up. Add a project with `./pam project add PATH`.")
+        raise SystemExit("pam is already set up. Add a project with `./pam project add PATH`.")
     user_id = _positive_id(
         str(args.user_id or _ask("Your Discord user ID")), "Discord user ID"
     )
@@ -158,7 +158,7 @@ def _setup_identity(args: argparse.Namespace) -> None:
         raise SystemExit("Discord bot token is required")
     _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
     _write_identity(state_dir, user_id)
-    print("\nPam identity saved. Connect a project with:")
+    print("\npam identity saved. Connect a project with:")
     print("  ./pam project add /path/to/project")
 
 
@@ -185,9 +185,9 @@ def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
 
 
 def setup(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Guide one user through a first Pam workspace")
+    parser = argparse.ArgumentParser(description="Guide one user through a first pam workspace")
     parser.add_argument(
-        "project", nargs="?", type=Path, help="Project directory for this Pam workspace"
+        "project", nargs="?", type=Path, help="Project directory for this pam workspace"
     )
     parser.add_argument("--state-dir", type=Path)
     parser.add_argument("--workspace", type=Path, help=argparse.SUPPRESS)
@@ -196,7 +196,7 @@ def setup(argv: list[str] | None = None) -> None:
     parser.add_argument("--guild-id")
     parser.add_argument("--channel-name")
     parser.add_argument(
-        "--no-service", action="store_true", help="Configure Pam without installing systemd"
+        "--no-service", action="store_true", help="Configure pam without installing systemd"
     )
     history = parser.add_mutually_exclusive_group()
     history.add_argument(
@@ -211,21 +211,21 @@ def setup(argv: list[str] | None = None) -> None:
         _setup_identity(args)
         return
 
-    print("Pam setup\n")
+    print("pam setup\n")
     print(
-        "Pam will run on this machine. Its private state stays in one data directory, while "
+        "pam will run on this machine. Its private state stays in one data directory, while "
         "Codex works only in the project directory you approve.\n"
     )
     print(
         "Create a bot at https://discord.com/developers/applications and enable Message Content "
-        "Intent. Pam will guide you through creating a dedicated project server and installing "
+        "Intent. pam will guide you through creating a dedicated project server and installing "
         "the bot there.\n"
         "In Discord, enable User Settings > Advanced > Developer Mode, then right-click your "
         "profile to copy your numeric user ID.\n"
     )
     state_dir = (
         args.state_dir
-        or Path(_ask("Pam data directory", str(DEFAULT_STATE_DIR.expanduser())))
+        or Path(_ask("pam data directory", str(DEFAULT_STATE_DIR.expanduser())))
     ).expanduser().resolve()
     workspace_arg = args.project or args.workspace
     workspace = (
@@ -287,24 +287,24 @@ def setup(argv: list[str] | None = None) -> None:
         raise
 
     print("\nWorkspace configured successfully.")
-    print(f"  Pam data:  {state_dir}")
+    print(f"  pam data:  {state_dir}")
     print(f"  Project:   {workspace}")
     print(f"  Discord:   {channel_url}")
     print(f"  Server ID: {guild_id}")
     print(f"  Git:       conversation history {'ignored' if ignore_history else 'trackable'}")
     if args.no_service:
-        print("\nPam is configured but not running. Start it with: pam-discord run")
+        print("\npam is configured but not running. Start it with: pam-discord run")
         return
 
     from .service import install
 
     install(state_dir)
-    print("\nPam is ready. Send a text or voice message here:")
+    print("\npam is ready. Send a text or voice message here:")
     print(f"  {channel_url}")
 
 
 def project_add(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Connect another project to Pam")
+    parser = argparse.ArgumentParser(description="Connect another project to pam")
     parser.add_argument("project", type=Path)
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     history = parser.add_mutually_exclusive_group()
@@ -397,7 +397,7 @@ def _discord_request(
         headers={
             "Authorization": f"Bot {token}",
             "Content-Type": "application/json",
-            "User-Agent": "PamDiscord/0.2",
+            "User-Agent": "pamDiscord/0.2",
         },
     )
     with urllib.request.urlopen(request, timeout=10) as response:
@@ -428,10 +428,10 @@ def _select_guild(guilds: list[dict[str, object]], requested_id: int | None) -> 
             if str(guild.get("id")) == str(requested_id):
                 return guild
         raise SystemExit(
-            "Pam cannot see that Discord server. Open the installation link and add the bot first."
+            "pam cannot see that Discord server. Open the installation link and add the bot first."
         )
     if not guilds:
-        raise SystemExit("Pam cannot see a Discord server yet. Add the bot, then run setup again.")
+        raise SystemExit("pam cannot see a Discord server yet. Add the bot, then run setup again.")
     if len(guilds) == 1:
         return guilds[0]
 
@@ -469,6 +469,12 @@ def _prepare_discord_workspace(
     if channel_id is not None:
         channel = _discord_get(token, f"/channels/{channel_id}")
         resolved_guild_id = _positive_id(str(channel.get("guild_id")), "Discord server ID")
+        _discord_request(
+            token,
+            f"/guilds/{resolved_guild_id}/members/@me",
+            method="PATCH",
+            payload={"nick": "pam"},
+        )
         return channel_id, resolved_guild_id, (
             f"https://discord.com/channels/{resolved_guild_id}/{channel_id}"
         )
@@ -480,20 +486,26 @@ def _prepare_discord_workspace(
         input("\nPress Enter after the new server exists...")
 
     install_url = _discord_install_url(bot_id)
-    print("\n2. Add Pam to that new server:")
+    print("\n2. Add pam to that new server:")
     print(f"  {install_url}")
     if guild_id is None:
-        input("\nPress Enter after Discord says Pam was added...")
+        input("\nPress Enter after Discord says pam was added...")
 
     try:
         guild_value = _discord_request(token, "/users/@me/guilds")
     except urllib.error.HTTPError as exc:
-        raise SystemExit(f"Could not list Pam's Discord servers (HTTP {exc.code})") from exc
+        raise SystemExit(f"Could not list pam's Discord servers (HTTP {exc.code})") from exc
     if not isinstance(guild_value, list):
         raise SystemExit("Discord returned an unexpected server list")
     guilds = [item for item in guild_value if isinstance(item, dict)]
     guild = _select_guild(guilds, guild_id)
     resolved_guild_id = _positive_id(str(guild.get("id")), "Discord server ID")
+    _discord_request(
+        token,
+        f"/guilds/{resolved_guild_id}/members/@me",
+        method="PATCH",
+        payload={"nick": "pam"},
+    )
 
     name = _channel_slug(channel_name or "general")
     channels_value = _discord_request(token, f"/guilds/{resolved_guild_id}/channels")
@@ -514,7 +526,7 @@ def _prepare_discord_workspace(
             payload={
                 "name": name,
                 "type": 0,
-                "topic": f"Pam workspace for {workspace}",
+                "topic": f"pam workspace for {workspace}",
             },
         )
     if not isinstance(channel, dict) or not channel.get("id"):
@@ -551,9 +563,9 @@ def _check_discord(
 
 
 def doctor(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Check whether Pam is ready to run")
+    parser = argparse.ArgumentParser(description="Check whether pam is ready to run")
     parser.add_argument(
-        "--state-dir", type=Path, default=DEFAULT_STATE_DIR, help="Pam data directory"
+        "--state-dir", type=Path, default=DEFAULT_STATE_DIR, help="pam data directory"
     )
     args = parser.parse_args(argv)
     state_dir = args.state_dir.expanduser().resolve()
@@ -600,7 +612,7 @@ def doctor(argv: list[str] | None = None) -> None:
         for failure in failures:
             print(f"FAIL {failure}")
         raise SystemExit(1)
-    print("\nPam is ready. Start it with:")
+    print("\npam is ready. Start it with:")
     if state_dir == DEFAULT_STATE_DIR.expanduser().resolve():
         print("pam-discord run")
     else:

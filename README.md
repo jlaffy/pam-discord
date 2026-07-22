@@ -1,8 +1,10 @@
-# Pam
+# pam
 
-Talk or type to Codex from Discord. Pam runs Codex on your remote computer.
+**pam** means **personal-agent-manager**.
 
-Pam enables shared Codex sessions between the Terminal and Discord, so you can continue the same
+Talk or type to Codex from Discord. pam runs Codex on your remote computer.
+
+pam enables shared Codex sessions between the Terminal and Discord, so you can continue the same
 Codex conversation from your phone.
 
 ```text
@@ -33,7 +35,7 @@ codex login
 
 - Open the [Discord Developer Portal](https://discord.com/developers/applications) and click
   **New Application**.
-- Name it `Pam` and click **Create**.
+- Name it `pam` and click **Create**.
 - Click **Bot** on the left.
 - Turn on **Message Content Intent**.
 - Under **Token**, click **Reset Token**, then **Copy**. Do not share this token.
@@ -44,7 +46,7 @@ codex login
 - Turn on **Developer Mode**.
 - Right-click your own name or picture and click **Copy User ID**.
 
-### 4. Finish Pam setup
+### 4. Finish pam setup
 
 ```bash
 pam setup
@@ -62,18 +64,18 @@ pam project add /ewsc/jlaffy/agent-native-genomics
 
 Choose whether `.pam/` conversation history is ignored by Git or can be committed.
 
-Follow the terminal instructions. Pam gives you links to:
+Follow the terminal instructions. pam gives you links to:
 
 1. Create a new Discord server for the project.
-2. Add Pam to the new Discord server.
+2. Add pam to the new Discord server.
 
-Pam prints a Discord link to `#general`. Open it and send your first message.
+pam prints a Discord link to `#general`. Open it and send your first message.
 
 ### 6. Use terminal and Discord shared sessions
 
 | Start a new linked conversation | Link one already in progress |
 | --- | --- |
-| `pam codex` | Ask Codex: `Link this conversation to Pam` |
+| `pam codex` | Ask Codex: `Link this conversation to pam` |
 
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
@@ -87,22 +89,22 @@ thread         = persistent Codex session
 conversation   = saved prompts and transcripts from audio or text, plus replies
 ```
 
-Pam stays running after you disconnect. Conversation history is saved in
+pam stays running after you disconnect. Conversation history is saved in
 `<project>/.pam/conversations/`. During setup, you choose whether Git ignores or tracks it.
 
-Pam runs Discord-started Codex work with full local access by default, equivalent to
+pam runs Discord-started Codex work with full local access by default, equivalent to
 `codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user
-running Pam. Set `codex_full_access = false` in Pam's `config.toml` to use Codex's normal sandbox.
-When Codex links to a supported file inside the project, Pam uploads it to the conversation thread.
-Files over the Discord server's upload limit stay on the remote machine and Pam reports their path.
+running pam. Set `codex_full_access = false` in pam's `config.toml` to use Codex's normal sandbox.
+When Codex links to a supported file inside the project, pam uploads it to the conversation thread.
+Files over the Discord server's upload limit stay on the remote machine and pam reports their path.
 
 ## Help
 
 ```bash
 pam doctor            # check Discord, Codex, and project setup
-pam service status    # check whether Pam is running
+pam service status    # check whether pam is running
 pam service logs      # show recent activity and errors
-pam service restart   # restart Pam
+pam service restart   # restart pam
 ```
 
 MIT licensed.

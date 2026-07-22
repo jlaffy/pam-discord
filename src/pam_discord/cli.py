@@ -42,7 +42,7 @@ def main() -> None:
         return
     if args and args[0] in {"-h", "--help"}:
         print(
-            "Pam connects Discord to Codex sessions on this remote computer.\n\n"
+            "pam connects Discord to Codex sessions on this remote computer.\n\n"
             "Commands:\n"
             "  pam setup             Save your Discord identity and bot token once\n"
             "  pam project add PATH  Connect another project and Discord server\n"
@@ -50,7 +50,7 @@ def main() -> None:
             "  pam link              Link the latest Codex conversation in this directory\n"
             "  pam doctor            Check configuration, Discord, and Codex\n"
             "  pam service           Manage the background service\n"
-            "  pam run               Run Pam in the foreground\n\n"
+            "  pam run               Run pam in the foreground\n\n"
             "Existing usage without 'run' remains supported."
         )
         return

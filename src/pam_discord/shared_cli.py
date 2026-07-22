@@ -17,7 +17,7 @@ from .setup import DEFAULT_STATE_DIR, project_add
 def _config(state_dir: Path):
     path = state_dir.expanduser().resolve() / "config.toml"
     if not path.exists():
-        raise SystemExit("Pam is not configured. Run `./pam setup` first.")
+        raise SystemExit("pam is not configured. Run `./pam setup` first.")
     return load_config(path)
 
 
@@ -29,7 +29,7 @@ def _project_for_path(config, path: Path) -> Path:
     }
     if not workspaces:
         raise SystemExit(
-            f"This directory is not connected to a Pam project: {path}\n"
+            f"This directory is not connected to a pam project: {path}\n"
             "Run `./pam project add /path/to/project`."
         )
     return max(workspaces, key=lambda item: len(item.parts))
@@ -44,7 +44,7 @@ async def _wait_for_app_server(url: str) -> None:
                 return
             except aiohttp.ClientError:
                 await asyncio.sleep(0.1)
-    raise SystemExit("Pam did not start its Codex app-server. Check `pam service logs`.")
+    raise SystemExit("pam did not start its Codex app-server. Check `pam service logs`.")
 
 
 def codex(argv: list[str]) -> None:
@@ -59,7 +59,7 @@ def codex(argv: list[str]) -> None:
     except SystemExit:
         if not (state_dir / "identity.json").exists():
             raise
-        print(f"This directory is not connected to Pam yet: {cwd}")
+        print(f"This directory is not connected to pam yet: {cwd}")
         project_add([str(cwd), "--state-dir", str(state_dir)])
         config = _config(state_dir)
         workspace = _project_for_path(config, cwd)
@@ -89,7 +89,7 @@ async def _request(url: str, method: str, params: dict[str, object]) -> object:
                     "params": {
                         "clientInfo": {
                             "name": "pam_link",
-                            "title": "Pam Link",
+                            "title": "pam Link",
                             "version": "0.2.0",
                         }
                     },
@@ -123,7 +123,7 @@ async def _link_latest(url: str, cwd: Path) -> str:
 
 
 def link(argv: list[str]) -> None:
-    parser = argparse.ArgumentParser(description="Link the latest Codex conversation to Pam")
+    parser = argparse.ArgumentParser(description="Link the latest Codex conversation to pam")
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     parser.add_argument("--cwd", type=Path, default=Path.cwd())
     args = parser.parse_args(argv)
@@ -133,7 +133,7 @@ def link(argv: list[str]) -> None:
     try:
         thread_id = asyncio.run(_link_latest(config.codex_app_server_url, cwd))
     except (aiohttp.ClientError, OSError) as exc:
-        raise SystemExit("Pam is not running. Start it with `./pam service start`.") from exc
+        raise SystemExit("pam is not running. Start it with `./pam service start`.") from exc
     request_dir = args.state_dir.expanduser().resolve() / "link-requests"
     request_dir.mkdir(parents=True, exist_ok=True)
     request_path = request_dir / f"{uuid.uuid4()}.json"
@@ -141,4 +141,4 @@ def link(argv: list[str]) -> None:
         json.dumps({"thread_id": thread_id, "cwd": str(cwd)}, indent=2) + "\n",
         encoding="utf-8",
     )
-    print(f"Linked Codex conversation {thread_id} to Pam.")
+    print(f"Linked Codex conversation {thread_id} to pam.")

@@ -169,7 +169,7 @@ def _service_content(state_dir: Path, executable: Path, working_dir: Path) -> st
         )
     )
     return f"""[Unit]
-Description=Pam Discord agent bridge
+Description=pam Discord agent bridge
 After=network-online.target
 Wants=network-online.target
 
@@ -210,40 +210,40 @@ def install(state_dir: Path, *, force: bool = False) -> None:
     working_dir = Path.cwd().resolve()
     if not _user_systemd_available():
         _fallback_start(state_dir, executable)
-        print("Pam is running in the background (systemd is unavailable on this machine).")
+        print("pam is running in the background (systemd is unavailable on this machine).")
         print(f"Logs: {state_dir / 'pam.log'}")
         return
     path = _service_path()
     content = _service_content(state_dir, executable, working_dir)
     if path.exists() and not force:
         if path.read_text(encoding="utf-8") == content:
-            print(f"Pam service is already installed at {path}")
+            print(f"pam service is already installed at {path}")
         else:
             raise SystemExit(
-                f"A different Pam service already exists at {path}. "
+                f"A different pam service already exists at {path}. "
                 "Re-run with `./pam service install --force` to replace it."
             )
     else:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
         path.chmod(0o600)
-        print(f"Installed Pam service: {path}")
+        print(f"Installed pam service: {path}")
 
     _systemctl("daemon-reload")
     _systemctl("enable", "--now", SERVICE_NAME)
-    print("Pam is running in the background and will restart after failures.")
+    print("pam is running in the background and will restart after failures.")
     print("Check it with: ./pam service status")
     print("Read its logs with: ./pam service logs")
 
     lingering = _lingering_enabled()
     if lingering is False:
         print(
-            "\nOne server setting remains: enable user lingering so Pam stays online after "
+            "\nOne server setting remains: enable user lingering so pam stays online after "
             "you log out and starts at boot:"
         )
         print(f"  loginctl enable-linger {getpass_user()}")
     elif lingering is True:
-        print("User lingering is enabled; Pam can remain online after logout and start at boot.")
+        print("User lingering is enabled; pam can remain online after logout and start at boot.")
 
 
 def getpass_user() -> str:
@@ -255,7 +255,7 @@ def getpass_user() -> str:
 def status(state_dir: Path = DEFAULT_STATE_DIR) -> None:
     state_dir = state_dir.expanduser().resolve()
     if not _user_systemd_available():
-        print("Pam is running." if _fallback_running(state_dir) else "Pam is not running.")
+        print("pam is running." if _fallback_running(state_dir) else "pam is not running.")
         if not _fallback_running(state_dir):
             raise SystemExit(1)
         return
@@ -269,30 +269,30 @@ def restart(state_dir: Path = DEFAULT_STATE_DIR) -> None:
     if not _user_systemd_available():
         _fallback_stop(state_dir)
         _fallback_start(state_dir)
-        print("Pam restarted.")
+        print("pam restarted.")
         return
     _systemctl("restart", SERVICE_NAME)
-    print("Pam restarted.")
+    print("pam restarted.")
 
 
 def stop(state_dir: Path = DEFAULT_STATE_DIR) -> None:
     state_dir = state_dir.expanduser().resolve()
     if not _user_systemd_available():
         _fallback_stop(state_dir)
-        print("Pam stopped.")
+        print("pam stopped.")
         return
     _systemctl("stop", SERVICE_NAME)
-    print("Pam stopped. It remains enabled for the next login or boot.")
+    print("pam stopped. It remains enabled for the next login or boot.")
 
 
 def start(state_dir: Path = DEFAULT_STATE_DIR) -> None:
     state_dir = state_dir.expanduser().resolve()
     if not _user_systemd_available():
         _fallback_start(state_dir)
-        print("Pam started.")
+        print("pam started.")
         return
     _systemctl("start", SERVICE_NAME)
-    print("Pam started.")
+    print("pam started.")
 
 
 def logs(lines: int, state_dir: Path = DEFAULT_STATE_DIR) -> None:
@@ -318,29 +318,29 @@ def uninstall(state_dir: Path = DEFAULT_STATE_DIR) -> None:
     if not _user_systemd_available():
         _fallback_stop(state_dir)
         _fallback_metadata(state_dir).unlink(missing_ok=True)
-        print("Pam background service removed. Pam configuration and archives were kept.")
+        print("pam background service removed. pam configuration and archives were kept.")
         return
     path = _service_path()
     _systemctl("disable", "--now", SERVICE_NAME, check=False)
     if path.exists():
         path.unlink()
     _systemctl("daemon-reload")
-    print("Pam background service removed. Pam configuration and archives were kept.")
+    print("pam background service removed. pam configuration and archives were kept.")
 
 
 def service(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Keep Pam running in the background")
+    parser = argparse.ArgumentParser(description="Keep pam running in the background")
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     commands = parser.add_subparsers(dest="command", required=True)
     install_parser = commands.add_parser("install", help="Install and start the service")
     install_parser.add_argument("--force", action="store_true")
-    commands.add_parser("status", help="Show whether Pam is running")
-    commands.add_parser("start", help="Start Pam")
-    commands.add_parser("stop", help="Stop Pam until next login or boot")
-    commands.add_parser("restart", help="Restart Pam")
-    logs_parser = commands.add_parser("logs", help="Show recent Pam logs")
+    commands.add_parser("status", help="Show whether pam is running")
+    commands.add_parser("start", help="Start pam")
+    commands.add_parser("stop", help="Stop pam until next login or boot")
+    commands.add_parser("restart", help="Restart pam")
+    logs_parser = commands.add_parser("logs", help="Show recent pam logs")
     logs_parser.add_argument("--lines", type=int, default=100)
-    commands.add_parser("uninstall", help="Remove the service but keep Pam data")
+    commands.add_parser("uninstall", help="Remove the service but keep pam data")
     args = parser.parse_args(argv)
 
     if args.command == "install":

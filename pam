@@ -6,7 +6,7 @@ repo_dir=$(cd -- "$(dirname -- "$script_path")" && pwd)
 executable="$repo_dir/.venv/bin/pam-discord"
 
 if [[ ! -x "$executable" ]]; then
-  echo "Pam is not installed yet. Run: ./install.sh" >&2
+  echo "pam is not installed yet. Run: ./install.sh" >&2
   exit 1
 fi
 
