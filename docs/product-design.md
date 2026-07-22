@@ -43,11 +43,12 @@ Pam never uploads conversation history automatically.
 ## Direct Codex sessions — planned
 
 ```bash
-pam codex --yolo
+pam codex [normal Codex options]
 ```
 
 This starts Codex normally, creates a thread in the project's `#general` channel, mirrors the full
 conversation, and allows the same session to continue from either the terminal or Discord.
+Options such as `--yolo` are optional Codex options that Pam passes through unchanged.
 
 If the directory has no Pam project server yet, the command:
 

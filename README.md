@@ -60,12 +60,13 @@ Pam prints a Discord link to `#general`. Open it and send your first message.
 ### Planned: start a linked Codex session directly
 
 ```bash
-pam codex --yolo
+pam codex
 ```
 
 If the project is not connected yet, Pam guides you through creating its Discord server and adding
 the bot before Codex starts. After that first time, the command opens immediately and creates the
-session's Discord thread. The normal `codex` command remains unchanged.
+session's Discord thread. Normal Codex options still work—for example, `pam codex --yolo`. The
+normal `codex` command remains unchanged.
 
 ## Done
 
