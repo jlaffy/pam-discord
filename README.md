@@ -63,7 +63,7 @@ Pam prints a Discord link to `#general`. Open it and send your first message.
 Discord server = your project
 channel        = project conversation area
 thread         = persistent Codex session
-voice message  = saved audio + transcript + Codex request
+conversation   = saved messages, audio, transcripts, prompts, and replies
 ```
 
 Pam stays running after you disconnect. Conversation history is saved in
