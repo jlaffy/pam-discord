@@ -6,7 +6,7 @@ import asyncio
 from pathlib import Path
 from unittest.mock import patch
 
-from pam_discord.bot import PamDiscord
+from pam_discord.bot import PamDiscord, _enable_session_polling
 from pam_discord.app_server import save_shared_sessions
 from pam_discord.config import ChannelConfig, Config
 
@@ -67,6 +67,7 @@ def test_linked_terminal_sessions_are_polled_for_new_turns(tmp_path: Path) -> No
     bot = _bot(tmp_path)
     bot.config.guilds[10] = channel
     save_shared_sessions(workspace, {"codex-thread": 123})
+    _enable_session_polling(workspace, "codex-thread")
     imported: list[str] = []
 
     async def import_history(thread_id: str) -> None:
@@ -76,3 +77,21 @@ def test_linked_terminal_sessions_are_polled_for_new_turns(tmp_path: Path) -> No
     asyncio.run(bot._sync_shared_sessions())
 
     assert imported == ["codex-thread"]
+
+
+def test_normal_shared_sessions_are_not_polled(tmp_path: Path) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    channel = ChannelConfig(workspace=workspace, project_record_dir=tmp_path / "records")
+    bot = _bot(tmp_path)
+    bot.config.guilds[10] = channel
+    save_shared_sessions(workspace, {"live-thread": 123})
+    imported: list[str] = []
+
+    async def import_history(thread_id: str) -> None:
+        imported.append(thread_id)
+
+    bot._import_codex_history = import_history  # type: ignore[method-assign]
+    asyncio.run(bot._sync_shared_sessions())
+
+    assert imported == []

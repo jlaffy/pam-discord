@@ -51,6 +51,25 @@ def _append_markdown(path: Path, heading: str, body: str) -> None:
         handle.write(f"## {heading}\n\n{body.strip()}\n\n")
 
 
+def _polled_sessions_path(workspace: Path) -> Path:
+    return workspace / ".pam" / "polled-sessions.json"
+
+
+def _load_polled_sessions(workspace: Path) -> set[str]:
+    path = _polled_sessions_path(workspace)
+    if not path.exists():
+        return set()
+    return {str(value) for value in json.loads(path.read_text(encoding="utf-8"))}
+
+
+def _enable_session_polling(workspace: Path, codex_thread_id: str) -> None:
+    sessions = _load_polled_sessions(workspace)
+    sessions.add(codex_thread_id)
+    path = _polled_sessions_path(workspace)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    _write_json(path, sorted(sessions))
+
+
 def _acquire_instance_lock(path: Path | None) -> None:
     if path is None:
         return
@@ -413,6 +432,17 @@ class PamDiscord(discord.Client):
                     thread = result.get("thread") if isinstance(result, dict) else None
                     if isinstance(thread, dict):
                         await self._link_started_codex_thread(thread)
+                        cwd = thread.get("cwd")
+                        if isinstance(cwd, str):
+                            channel_config = self._workspace_config_for_cwd(
+                                Path(cwd).resolve()
+                            )
+                            if channel_config is not None:
+                                thread_id = str(thread.get("id") or "")
+                                _enable_session_polling(
+                                    channel_config.workspace, thread_id
+                                )
+                                await self._import_codex_history(thread_id)
                     path.unlink()
                 except Exception:
                     LOG.exception("failed to process Pam link request %s", path)
@@ -423,7 +453,7 @@ class PamDiscord(discord.Client):
         """Import turns written by Codex clients that predate `pam codex`."""
         seen: set[str] = set()
         for channel_config in self.config.guilds.values():
-            for codex_thread_id in load_shared_sessions(channel_config.workspace):
+            for codex_thread_id in _load_polled_sessions(channel_config.workspace):
                 if codex_thread_id in seen:
                     continue
                 seen.add(codex_thread_id)
