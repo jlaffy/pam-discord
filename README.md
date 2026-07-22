@@ -49,17 +49,12 @@ Discord user ID  → paste the ID from step 3
 Discord bot token → paste the token from step 2
 ```
 
-Then:
+Follow the terminal instructions. Pam gives you links to:
 
-- Open Pam's **create server** link.
-- Create the new project server.
-- Return to the terminal and press **Enter**.
-- Open Pam's **install bot** link.
-- Choose the new project server.
-- Click **Authorize**.
-- Return to the terminal and press **Enter**.
-- Open the final Discord channel link.
-- Send a message.
+1. Create the new project server.
+2. Add Pam to that server.
+
+Finally, open the channel link Pam prints and send a message.
 
 ## Done
 
