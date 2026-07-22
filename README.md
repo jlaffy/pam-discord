@@ -2,8 +2,8 @@
 
 Talk or type to Codex from Discord. Pam runs Codex on your remote computer.
 
-Pam is being built for terminal and Discord shared sessions, so you can continue the same Codex
-conversation from your phone.
+Pam enables shared Codex sessions between the Terminal and Discord, so you can continue the same
+Codex conversation from your phone.
 
 ```text
 remote access       → reach your remote server and Codex through Discord on your phone or computer
