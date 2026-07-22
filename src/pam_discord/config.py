@@ -29,6 +29,7 @@ class Config:
     codex_app_server_url: str
     instance_lock_dir: Path | None = None
     codex_full_access: bool = True
+    whisper_beam_size: int = 1
 
 
 def load_config(path: Path) -> Config:
@@ -104,4 +105,5 @@ def load_config(path: Path) -> Config:
             else None
         ),
         codex_full_access=bool(raw.get("codex_full_access", True)),
+        whisper_beam_size=int(raw.get("whisper_beam_size", 1)),
     )

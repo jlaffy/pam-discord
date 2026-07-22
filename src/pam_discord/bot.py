@@ -150,6 +150,7 @@ class PamDiscord(discord.Client):
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
         await self._app_server.start(self.config.codex_binary)
         self._link_watcher = asyncio.create_task(self._watch_link_requests())
+        asyncio.create_task(self._warm_transcriber())
 
     async def close(self) -> None:
         if self._link_watcher is not None:
@@ -652,14 +653,32 @@ class PamDiscord(discord.Client):
                 )
             return
 
-    def _transcribe(self, audio_path: Path) -> str:
+    def _load_transcriber(self) -> None:
         if self._model is None:
             self._model = WhisperModel(
                 self.config.whisper_model,
                 device=self.config.whisper_device,
                 compute_type=self.config.whisper_compute_type,
             )
-        segments, info = self._model.transcribe(str(audio_path), beam_size=5, vad_filter=True)
+
+    async def _warm_transcriber(self) -> None:
+        try:
+            async with self._model_lock:
+                await asyncio.to_thread(self._load_transcriber)
+            LOG.info(
+                "voice transcription ready: %s on %s",
+                self.config.whisper_model,
+                self.config.whisper_device,
+            )
+        except Exception:
+            LOG.exception("failed to preload voice transcription model")
+
+    def _transcribe(self, audio_path: Path) -> str:
+        self._load_transcriber()
+        assert self._model is not None
+        segments, info = self._model.transcribe(
+            str(audio_path), beam_size=self.config.whisper_beam_size, vad_filter=True
+        )
         if info.duration > self.config.max_audio_seconds:
             raise ValueError("decoded audio exceeds configured duration limit")
         transcript = " ".join(segment.text.strip() for segment in segments).strip()

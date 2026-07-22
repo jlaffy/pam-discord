@@ -13,7 +13,14 @@ from pam_discord.setup import (
     doctor,
     project_add,
     setup,
+    _whisper_defaults,
 )
+
+
+def test_whisper_defaults_fall_back_to_fast_cpu(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("ctranslate2.get_cuda_device_count", lambda: 0)
+
+    assert _whisper_defaults() == ("tiny.en", "cpu", "int8")
 
 
 def test_setup_creates_private_single_project_configuration(
@@ -50,6 +57,7 @@ def test_setup_creates_private_single_project_configuration(
     assert config.channels[222].project_record_dir == workspace / ".pam" / "conversations"
     assert config.guilds[333].workspace == workspace
     assert config.guilds[333].project_record_dir == workspace / ".pam" / "conversations"
+    assert config.whisper_beam_size == 1
     assert (workspace / ".gitignore").read_text() == ".pam/\n"
     assert (state_dir / ".env").read_text() == "DISCORD_BOT_TOKEN=private-token\n"
     assert stat.S_IMODE((state_dir / ".env").stat().st_mode) == 0o600

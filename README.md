@@ -10,6 +10,7 @@ remote access       → reach your remote server and Codex through Discord on yo
 complete records    → prompts and conversation transcripts saved from audio or text
 shared sessions     → continue in the terminal or Discord
 file delivery       → receive generated plots, presentations, documents, and tables in Discord
+fast voice          → transcribe voice notes using the fastest reliable CPU or GPU mode detected
 ```
 
 ## Start here
