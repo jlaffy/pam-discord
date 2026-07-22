@@ -82,6 +82,7 @@ whisper_compute_type = "int8"
 codex_binary = "codex"
 codex_timeout_seconds = 1800
 codex_app_server_url = "ws://127.0.0.1:45832"
+codex_full_access = true
 
 [channels.{_toml_string(str(channel_id))}]
 workspace = {_toml_string(str(workspace))}

@@ -283,6 +283,11 @@ class PamDiscord(discord.Client):
                         "input": [{"type": "text", "text": agent_prompt}],
                         "clientUserMessageId": f"discord:{message.id}",
                         "approvalPolicy": "never",
+                        "sandboxPolicy": (
+                            {"type": "dangerFullAccess"}
+                            if self.config.codex_full_access
+                            else None
+                        ),
                     },
                 )
                 return
@@ -631,6 +636,11 @@ class PamDiscord(discord.Client):
             command = [
                 self.config.codex_binary,
                 "exec",
+                *(
+                    ["--dangerously-bypass-approvals-and-sandbox"]
+                    if self.config.codex_full_access
+                    else []
+                ),
                 "resume",
                 "--json",
                 "-o",
@@ -642,6 +652,11 @@ class PamDiscord(discord.Client):
             command = [
                 self.config.codex_binary,
                 "exec",
+                *(
+                    ["--dangerously-bypass-approvals-and-sandbox"]
+                    if self.config.codex_full_access
+                    else []
+                ),
                 "--json",
                 "-C",
                 str(workspace),

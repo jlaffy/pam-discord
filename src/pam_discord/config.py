@@ -28,6 +28,7 @@ class Config:
     codex_timeout_seconds: int
     codex_app_server_url: str
     instance_lock_dir: Path | None = None
+    codex_full_access: bool = True
 
 
 def load_config(path: Path) -> Config:
@@ -102,4 +103,5 @@ def load_config(path: Path) -> Config:
             if raw.get("instance_lock_dir")
             else None
         ),
+        codex_full_access=bool(raw.get("codex_full_access", True)),
     )

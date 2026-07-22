@@ -55,6 +55,8 @@ def test_new_task_is_saved_and_followup_resumes_same_session(tmp_path: Path) -> 
     assert returned1 == returned2 == session_id
     assert "resume" not in run.call_args_list[0].args[0]
     assert "resume" in run.call_args_list[1].args[0]
+    assert "--dangerously-bypass-approvals-and-sandbox" in run.call_args_list[0].args[0]
+    assert "--dangerously-bypass-approvals-and-sandbox" in run.call_args_list[1].args[0]
     assert json.loads((conversation / "state.json").read_text())["codex_session_id"] == session_id
     assert (first / "codex-events.jsonl").exists()
     assert (second / "codex-events.jsonl").exists()

@@ -88,6 +88,10 @@ conversation   = saved prompts and transcripts from audio or text, plus replies
 Pam stays running after you disconnect. Conversation history is saved in
 `<project>/.pam/conversations/`. During setup, you choose whether Git ignores or tracks it.
 
+Pam runs Discord-started Codex work with full local access by default, equivalent to
+`codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user
+running Pam. Set `codex_full_access = false` in Pam's `config.toml` to use Codex's normal sandbox.
+
 ## Help
 
 ```bash
