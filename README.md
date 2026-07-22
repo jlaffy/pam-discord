@@ -48,22 +48,38 @@ Discord reply          <-------        saved archive <- result
 - Pam must be running and online to receive new work.
 - Native Discord voice recording is mobile-only; desktop users upload an audio file.
 
-## Setup
+## The simple model
+
+A Pam server is just the computer where the `pam-discord` process stays running. That machine must
+be able to reach Discord and the project directory. For the first version, one Discord channel maps
+to one project directory and uses the Codex account already signed in on that machine.
+
+Pam keeps its private configuration, Discord token, archives, and session mappings together in a
+data directory that you choose. Those files are separate from the project repository.
+
+```text
+Discord project channel
+  -> Pam running on this server
+  -> approved project directory
+  -> your signed-in Codex CLI
+```
+
+## Guided setup
 
 You need Python 3.11+, a Discord server, an online computer or Linux server, and the [Codex CLI](https://developers.openai.com/codex/cli/) signed in with ChatGPT. Clone every project you want Pam to use onto that same machine.
 
-### 1. Install
+### 1. Install Pam and sign in to Codex
 
 ```bash
 git clone https://github.com/jlaffy/pam-discord.git
 cd pam-discord
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
+./install.sh
 codex login
 ```
 
-On Windows, activate with `.venv\Scripts\Activate.ps1`.
+The installer checks Python, creates a private virtual environment inside the checkout, installs
+Pam, and tells you the next command. The `./pam` helper means you do not need to activate the
+environment manually. Windows users can follow the manual installation instructions below.
 
 ### 2. Create a Discord bot
 
@@ -74,47 +90,55 @@ In the [Discord Developer Portal](https://discord.com/developers/applications):
 3. Invite it with **View Channels**, **Read Message History**, **Send Messages**, **Create Public Threads**, and **Send Messages in Threads** permissions.
 4. Copy its token. Keep the token private.
 
-### 3. Configure
+### 3. Let Pam configure your first workspace
+
+```bash
+./pam setup
+```
+
+The setup guide asks for:
+
+- A private Pam data directory
+- The project directory Pam may use
+- Your Discord user ID
+- The project's Discord channel ID
+- The Discord bot token, entered without displaying it
+
+Pam creates private `.env` and `config.toml` files without overwriting existing setup. Enable
+Discord **Developer Mode** to copy user and channel IDs.
+
+### 4. Check and run
+
+The setup guide prints exact commands using your chosen data directory. They look like:
+
+```bash
+./pam doctor
+./pam run
+```
+
+Send a harmless first message in the mapped channel, such as: “Read this project's README and
+summarize it without changing files.” Pam creates a Discord thread for the task; follow-ups inside
+that thread resume the same Codex session.
+
+## Manual configuration
+
+For additional workspaces or manual setup, copy the examples:
 
 ```bash
 cp .env.example .env
 cp config.example.toml config.toml
 ```
 
-Add the Discord token to `.env`:
+Each `[channels."ID"]` entry in `config.toml` maps one Discord channel to one workspace. Only listed
+users and mapped channels are processed.
 
-```dotenv
-DISCORD_BOT_TOKEN=your-private-bot-token
-```
-
-Enable Discord **Developer Mode**, then copy your user ID and channel IDs. Edit `config.toml`:
-
-```toml
-archive_dir = "./archive"
-allowed_user_ids = [111111111111111111]
-
-[channels."222222222222222222"]
-workspace = "/absolute/path/to/agent-native-genomics"
-run_codex = true
-
-[channels."333333333333333333"]
-workspace = "/absolute/path/to/personal-workspace"
-run_codex = true
-```
-
-Each channel points to one workspace—the local project directory where Codex will act. Only listed users and mapped channels are processed.
-
-### 4. Run
+Run the manually configured instance with:
 
 ```bash
 pam-discord --env-file .env --config config.toml
 ```
 
-Send a short voice message in a mapped channel. Pam creates a thread and replies there with the transcript and Codex result. Add another voice or text message inside the thread to continue the same agent session.
-
 For continuous availability, run Pam as a background service on a machine that stays online.
-
-Your first test should request something harmless, such as: “Read this project's README and summarize it without changing any files.” Confirm the transcript, reply, and archive before allowing editing tasks.
 
 ## Conversation record
 

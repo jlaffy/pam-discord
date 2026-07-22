@@ -389,7 +389,7 @@ class PamDiscord(discord.Client):
             await channel.send(text[offset : offset + 1900])
 
 
-def main() -> None:
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Run the Pam Discord agent bridge")
     parser.add_argument("--config", type=Path, default=Path("config.toml"))
     parser.add_argument(
@@ -398,7 +398,7 @@ def main() -> None:
         default=Path(".env"),
         help="Private dotenv file containing DISCORD_BOT_TOKEN",
     )
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     load_dotenv(args.env_file)
     token = os.environ.get("DISCORD_BOT_TOKEN")
     if not token:

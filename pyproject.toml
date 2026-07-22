@@ -17,7 +17,7 @@ dependencies = [
 dev = ["pytest>=8,<10"]
 
 [project.scripts]
-pam-discord = "pam_discord.bot:main"
+pam-discord = "pam_discord.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pam_discord"]
