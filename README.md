@@ -1,7 +1,8 @@
 # Pam
 
-Talk to Codex from Discord using text or voice. Pam works inside a project on your server, keeps
-each Discord thread connected to one Codex session, and saves the conversation.
+Pam gives you an always-on connection to Codex on a remote machine through Discord—using text or
+voice from your phone or computer. Each Discord thread keeps its own Codex session, and Pam saves
+the conversation.
 
 ## Set up in a few minutes
 
@@ -17,33 +18,32 @@ cd pam-discord
 codex login
 ```
 
-### 2. Create the Discord bot
+### 2. Create a Discord bot
 
 Open the [Discord Developer Portal](https://discord.com/developers/applications):
 
 1. Create an application and add a bot.
 2. Enable **Message Content Intent**.
-3. Invite it to your server with **View Channels**, **Read Message History**, **Send Messages**,
-   **Create Public Threads**, and **Send Messages in Threads**.
-4. Copy the bot token.
+3. Copy the bot token.
 
-In Discord, enable **User Settings → Advanced → Developer Mode**. Right-click your profile and the
-project channel to copy their IDs.
+In Discord, enable **User Settings → Advanced → Developer Mode**, right-click your profile, and
+copy your user ID.
 
 ### 3. Let Pam finish
 
 ```bash
-./pam setup
-./pam doctor
-./pam service install
+./pam setup /path/to/project
 ```
 
-The setup guide asks for the token, IDs, and project directory. The token is entered privately and
-is never shown. `doctor` checks Discord, Codex, and the project. The service command keeps Pam
-running after you log out and restarts it after failures.
+Pam asks for your Discord user ID and the hidden bot token, then prints an installation link. Click
+it and choose an existing Discord server. Pam creates a project area with `#main`, connects it to
+the project directory, checks Codex, and starts its background service.
 
-Now send a text or voice message in the project channel. Pam creates a thread, runs Codex, replies
-there, and resumes the same session for follow-ups.
+Pam then prints the direct Discord link. Send a text or voice message there and you are ready.
+
+The project directory is the Pam workspace. Later, its Discord area can have more channels mapped
+to project subdirectories. Setup needs SSH once; afterward Pam uses outbound encrypted connections
+to Discord, needs no public inbound port, and keeps running when you disconnect.
 
 ## Useful commands
 

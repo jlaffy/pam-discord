@@ -6,7 +6,13 @@ from pathlib import Path
 import pytest
 
 from pam_discord.config import load_config
-from pam_discord.setup import doctor, setup
+from pam_discord.setup import (
+    DISCORD_BOT_PERMISSIONS,
+    _discord_install_url,
+    _prepare_discord_workspace,
+    doctor,
+    setup,
+)
 
 
 def test_setup_creates_private_single_project_configuration(
@@ -16,6 +22,10 @@ def test_setup_creates_private_single_project_configuration(
     workspace = tmp_path / "project"
     workspace.mkdir()
     monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
 
     setup(
         [
@@ -27,6 +37,7 @@ def test_setup_creates_private_single_project_configuration(
             "111",
             "--channel-id",
             "222",
+            "--no-service",
         ]
     )
 
@@ -61,6 +72,7 @@ def test_setup_does_not_overwrite_existing_private_files(
                 "111",
                 "--channel-id",
                 "222",
+                "--no-service",
             ]
         )
 
@@ -74,6 +86,10 @@ def test_doctor_checks_generated_state(
     workspace = tmp_path / "project"
     workspace.mkdir()
     monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
     setup(
         [
             "--state-dir",
@@ -84,6 +100,7 @@ def test_doctor_checks_generated_state(
             "111",
             "--channel-id",
             "222",
+            "--no-service",
         ]
     )
     monkeypatch.setattr(
@@ -95,3 +112,63 @@ def test_doctor_checks_generated_state(
     )
 
     doctor(["--state-dir", str(state_dir)])
+
+
+def test_discord_install_url_requests_required_bot_permissions() -> None:
+    url = _discord_install_url("999")
+
+    assert "client_id=999" in url
+    assert "scope=bot" in url
+    assert f"permissions={DISCORD_BOT_PERMISSIONS}" in url
+
+
+def test_prepare_discord_workspace_creates_category_and_main_channel(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "great-project"
+    workspace.mkdir()
+    calls: list[tuple[str, str, object]] = []
+    monkeypatch.setattr(
+        "pam_discord.setup._discord_get",
+        lambda _token, _path: {"id": "999", "username": "Pam"},
+    )
+
+    def request(_token: str, path: str, *, method: str = "GET", payload=None):
+        calls.append((path, method, payload))
+        if path == "/users/@me/guilds":
+            return [{"id": "333", "name": "Research"}]
+        if payload["type"] == 4:
+            return {"id": "444"}
+        return {"id": "555"}
+
+    monkeypatch.setattr("pam_discord.setup._discord_request", request)
+
+    result = _prepare_discord_workspace(
+        "token", workspace, channel_id=None, guild_id=333, channel_name=None
+    )
+
+    assert result == (555, 333, "https://discord.com/channels/333/555")
+    assert calls[1] == (
+        "/guilds/333/channels",
+        "POST",
+        {"name": "Great Project", "type": 4},
+    )
+    assert calls[2][2]["name"] == "main"
+    assert calls[2][2]["parent_id"] == "444"
+
+
+def test_setup_installs_service_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    state_dir = tmp_path / "pam-state"
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    installed: list[Path] = []
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+    monkeypatch.setattr("pam_discord.service.install", installed.append)
+
+    setup([str(workspace), "--state-dir", str(state_dir), "--user-id", "111"])
+
+    assert installed == [state_dir.resolve()]
