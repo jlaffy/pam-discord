@@ -113,7 +113,8 @@ def setup(argv: list[str] | None = None) -> None:
     )
     print(
         "Create a bot at https://discord.com/developers/applications and enable Message Content "
-        "Intent. Pam will generate the link that installs it into your Discord server.\n"
+        "Intent. Pam will guide you through creating a dedicated project server and installing "
+        "the bot there.\n"
         "In Discord, enable User Settings > Advanced > Developer Mode, then right-click your "
         "profile to copy your numeric user ID.\n"
     )
@@ -294,8 +295,14 @@ def _prepare_discord_workspace(
             f"https://discord.com/channels/{resolved_guild_id}/{channel_id}"
         )
 
+    print("\n1. Create a new Discord server for this project:")
+    print("  https://discord.com/channels/@me")
+    print(f"  In Discord, click +, choose Create My Own, and name it {workspace.name!r}.")
+    if guild_id is None:
+        input("\nPress Enter after the new server exists...")
+
     install_url = _discord_install_url(bot_id)
-    print("\nOpen this link and add Pam to the Discord server you want to use:")
+    print("\n2. Add Pam to that new server:")
     print(f"  {install_url}")
     if guild_id is None:
         input("\nPress Enter after Discord says Pam was added...")
@@ -310,29 +317,30 @@ def _prepare_discord_workspace(
     guild = _select_guild(guilds, guild_id)
     resolved_guild_id = _positive_id(str(guild.get("id")), "Discord server ID")
 
-    display_name = workspace.name.replace("-", " ").replace("_", " ").strip().title()
-    category = _discord_request(
-        token,
-        f"/guilds/{resolved_guild_id}/channels",
-        method="POST",
-        payload={"name": display_name or "Pam Project", "type": 4},
+    name = _channel_slug(channel_name or "general")
+    channels_value = _discord_request(token, f"/guilds/{resolved_guild_id}/channels")
+    channels = channels_value if isinstance(channels_value, list) else []
+    channel = next(
+        (
+            item
+            for item in channels
+            if isinstance(item, dict) and item.get("type") == 0 and item.get("name") == name
+        ),
+        None,
     )
-    if not isinstance(category, dict) or not category.get("id"):
-        raise SystemExit("Discord did not create the project category")
-    name = _channel_slug(channel_name or workspace.name or "main")
-    channel = _discord_request(
-        token,
-        f"/guilds/{resolved_guild_id}/channels",
-        method="POST",
-        payload={
-            "name": "main" if channel_name is None else name,
-            "type": 0,
-            "parent_id": str(category["id"]),
-            "topic": f"Pam workspace for {workspace}",
-        },
-    )
+    if channel is None:
+        channel = _discord_request(
+            token,
+            f"/guilds/{resolved_guild_id}/channels",
+            method="POST",
+            payload={
+                "name": name,
+                "type": 0,
+                "topic": f"Pam workspace for {workspace}",
+            },
+        )
     if not isinstance(channel, dict) or not channel.get("id"):
-        raise SystemExit("Discord did not create the project channel")
+        raise SystemExit(f"Discord did not find or create #{name}")
     resolved_channel_id = _positive_id(str(channel["id"]), "Discord channel ID")
     channel_url = f"https://discord.com/channels/{resolved_guild_id}/{resolved_channel_id}"
     return resolved_channel_id, resolved_guild_id, channel_url

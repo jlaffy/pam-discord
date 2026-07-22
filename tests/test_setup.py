@@ -122,7 +122,7 @@ def test_discord_install_url_requests_required_bot_permissions() -> None:
     assert f"permissions={DISCORD_BOT_PERMISSIONS}" in url
 
 
-def test_prepare_discord_workspace_creates_category_and_main_channel(
+def test_prepare_discord_workspace_uses_general_in_dedicated_server(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     workspace = tmp_path / "great-project"
@@ -137,9 +137,9 @@ def test_prepare_discord_workspace_creates_category_and_main_channel(
         calls.append((path, method, payload))
         if path == "/users/@me/guilds":
             return [{"id": "333", "name": "Research"}]
-        if payload["type"] == 4:
-            return {"id": "444"}
-        return {"id": "555"}
+        if path == "/guilds/333/channels" and method == "GET":
+            return [{"id": "555", "name": "general", "type": 0}]
+        raise AssertionError((path, method, payload))
 
     monkeypatch.setattr("pam_discord.setup._discord_request", request)
 
@@ -148,13 +148,7 @@ def test_prepare_discord_workspace_creates_category_and_main_channel(
     )
 
     assert result == (555, 333, "https://discord.com/channels/333/555")
-    assert calls[1] == (
-        "/guilds/333/channels",
-        "POST",
-        {"name": "Great Project", "type": 4},
-    )
-    assert calls[2][2]["name"] == "main"
-    assert calls[2][2]["parent_id"] == "444"
+    assert calls[1] == ("/guilds/333/channels", "GET", None)
 
 
 def test_setup_installs_service_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:

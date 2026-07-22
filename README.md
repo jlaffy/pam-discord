@@ -35,15 +35,17 @@ copy your user ID.
 ./pam setup /path/to/project
 ```
 
-Pam asks for your Discord user ID and the hidden bot token, then prints an installation link. Click
-it and choose an existing Discord server. Pam creates a project area with `#main`, connects it to
-the project directory, checks Codex, and starts its background service.
+Pam asks for your Discord user ID and hidden bot token, then links you to create a new Discord
+server for the project. After you click **Create**, Pam gives you its bot-install link. It connects
+that server's `#general` channel to the project directory, checks Codex, and starts its background
+service.
 
 Pam then prints the direct Discord link. Send a text or voice message there and you are ready.
 
-The project directory is the Pam workspace. Later, its Discord area can have more channels mapped
-to project subdirectories. Setup needs SSH once; afterward Pam uses outbound encrypted connections
-to Discord, needs no public inbound port, and keeps running when you disconnect.
+One project directory corresponds to one project-specific Discord server. Later, that server can
+have more channels mapped to project subdirectories. Each Discord thread is one Codex session.
+Setup needs SSH once; afterward Pam uses outbound encrypted connections to Discord, needs no public
+inbound port, and keeps running when you disconnect.
 
 ## Useful commands
 
