@@ -73,6 +73,15 @@ Use `pam codex` when you have direct terminal access. Pam records the conversati
 same session available in Discord. If the project is not connected yet, Pam first guides you through
 creating its Discord server. Normal Codex options still work—for example, `pam codex --yolo`.
 
+Already working in Codex? Link the current conversation instead:
+
+```text
+/pam link
+```
+
+Pam imports its existing history, creates the Discord thread, and continues recording the same
+session from both places.
+
 ## Done
 
 ```text
