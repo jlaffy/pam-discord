@@ -85,9 +85,22 @@ codex_timeout_seconds = 1800
 workspace = {_toml_string(str(workspace))}
 run_codex = true
 instruction_prefix = "Follow this project's instructions."
-project_record_dir = "prompts/conversations"
+project_record_dir = ".pam/conversations"
 """
     _write_private(path, content)
+
+
+def _ignore_project_archive(workspace: Path) -> None:
+    path = workspace / ".gitignore"
+    marker = ".pam/"
+    if path.exists():
+        content = path.read_text(encoding="utf-8")
+        if any(line.strip() == marker for line in content.splitlines()):
+            return
+        separator = "" if not content or content.endswith("\n") else "\n"
+        path.write_text(f"{content}{separator}{marker}\n", encoding="utf-8")
+    else:
+        path.write_text(f"{marker}\n", encoding="utf-8")
 
 
 def setup(argv: list[str] | None = None) -> None:
@@ -167,6 +180,7 @@ def setup(argv: list[str] | None = None) -> None:
             channel_id=channel_id,
             workspace=workspace,
         )
+        _ignore_project_archive(workspace)
     except Exception:
         env_path.unlink(missing_ok=True)
         raise

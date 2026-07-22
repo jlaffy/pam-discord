@@ -45,9 +45,38 @@ def test_setup_creates_private_single_project_configuration(
     assert config.allowed_user_ids == frozenset({111})
     assert config.channels[222].workspace == workspace
     assert config.channels[222].run_codex is True
+    assert config.channels[222].project_record_dir == workspace / ".pam" / "conversations"
+    assert (workspace / ".gitignore").read_text() == ".pam/\n"
     assert (state_dir / ".env").read_text() == "DISCORD_BOT_TOKEN=private-token\n"
     assert stat.S_IMODE((state_dir / ".env").stat().st_mode) == 0o600
     assert stat.S_IMODE((state_dir / "config.toml").stat().st_mode) == 0o600
+
+
+def test_setup_preserves_gitignore_and_adds_pam_once(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    ignore = workspace / ".gitignore"
+    ignore.write_text("data/\n")
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+
+    setup(
+        [
+            str(workspace),
+            "--state-dir",
+            str(tmp_path / "pam-state"),
+            "--user-id",
+            "111",
+            "--no-service",
+        ]
+    )
+
+    assert ignore.read_text() == "data/\n.pam/\n"
 
 
 def test_setup_does_not_overwrite_existing_private_files(

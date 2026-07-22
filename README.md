@@ -41,6 +41,7 @@ that server's `#general` channel to the project directory, checks Codex, and sta
 service.
 
 Pam then prints the direct Discord link. Send a text or voice message there and you are ready.
+For voice messages, Pam posts the transcription into the same thread before Codex replies.
 
 One project directory corresponds to one project-specific Discord server. Later, that server can
 have more channels mapped to project subdirectories. Each Discord thread is one Codex session.
@@ -59,6 +60,9 @@ inbound port, and keeps running when you disconnect.
 ```
 
 Pam only accepts configured users and channels and only works in configured project directories.
-Private tokens, recordings, session state, and archives stay outside the project repository.
+Every thread's messages, exact prompts, Codex replies, metadata, transcripts, and original audio are
+kept under `.pam/conversations/` in the project. Setup adds `.pam/` to the project's `.gitignore`,
+so this complete local history is not accidentally committed. Private service state and tokens stay
+under `~/.local/share/pam-discord`.
 
 MIT licensed.

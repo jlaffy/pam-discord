@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import subprocess
 import socket
 from datetime import UTC, datetime
@@ -223,9 +224,10 @@ class PamDiscord(discord.Client):
                 conversation_dir / "conversation.jsonl",
                 {"role": "human", "prompt": prompt, **metadata},
             )
-            project_conversation_dir = self._record_project_message(
+            project_record = self._record_project_message(
                 channel_config,
                 thread,
+                record_dir,
                 metadata,
                 prompt,
                 transcript,
@@ -252,7 +254,9 @@ class PamDiscord(discord.Client):
                     },
                 )
                 await self._send_chunks(thread, f"**Codex**\n{output}")
-                if project_conversation_dir is not None:
+                if project_record is not None:
+                    project_conversation_dir, project_message_dir = project_record
+                    shutil.copytree(record_dir, project_message_dir, dirs_exist_ok=True)
                     agent_record = {
                         "role": "agent",
                         "agent": "codex",
@@ -272,14 +276,17 @@ class PamDiscord(discord.Client):
         self,
         channel_config: ChannelConfig,
         thread: discord.Thread,
+        record_dir: Path,
         metadata: dict[str, object],
         prompt: str,
         transcript: str,
-    ) -> Path | None:
+    ) -> tuple[Path, Path] | None:
         if channel_config.project_record_dir is None:
             return None
         project_dir = channel_config.project_record_dir / str(thread.id)
         project_dir.mkdir(parents=True, exist_ok=True)
+        project_message_dir = project_dir / "messages" / record_dir.name
+        shutil.copytree(record_dir, project_message_dir, dirs_exist_ok=True)
         project_metadata = project_dir / "metadata.json"
         if not project_metadata.exists():
             _write_json(
@@ -303,7 +310,7 @@ class PamDiscord(discord.Client):
             f"{metadata['author']} · {metadata['created_at']}",
             prompt,
         )
-        return project_dir
+        return project_dir, project_message_dir
 
     def _transcribe(self, audio_path: Path) -> str:
         if self._model is None:
