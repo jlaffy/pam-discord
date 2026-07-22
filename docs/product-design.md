@@ -9,8 +9,8 @@ This file records agreed product behavior. Items marked **planned** are not impl
 Pam keeps people connected to persistent agent sessions on remote machines. Codex is the first
 supported agent. Transcription and logging support that purpose; they are not the product itself.
 
-Pam's three core benefits are remote access to work on another machine, complete project-specific
-conversation records, and continuity between Discord and sessions started directly in the terminal.
+Pam's three core benefits are always-on Discord access to Codex and work on a remote server,
+complete project-specific conversation records, and terminal and Discord shared sessions.
 
 ## Mental model
 
