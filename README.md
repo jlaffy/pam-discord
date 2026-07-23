@@ -12,9 +12,11 @@ human-readable Markdown and machine-readable JSONL.
 together](docs/how-pam-works.md).
 
 ```text
-remote access → reach your remote computer and Codex through Discord
-fast voice    → transcribe voice notes using the fastest reliable CPU or GPU mode detected
-file delivery → receive generated plots, presentations, documents, and tables in Discord
+shared conversations → start or continue in the terminal or Discord
+complete history     → save prompts and conversations in Markdown and JSONL
+remote access        → reach your remote computer and Codex through Discord
+fast voice           → transcribe voice notes using the fastest reliable CPU or GPU mode detected
+file delivery        → receive and easily view generated files in Discord
 ```
 
 ## Start here
