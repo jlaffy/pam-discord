@@ -103,11 +103,14 @@ non-interactive Discord starts, while pam intentionally presents both origins in
 ## Done
 
 ```text
-project directory ↔ Discord server
-Codex session     ↔ Discord thread
-conversation      = the same linked history viewed through either interface
-channel           = a way to organize conversations within a Discord server
+project directory                 ↔ Discord server
+project subdirectory              ↔ Discord channel
+Codex session in that directory   ↔ Discord thread in the corresponding channel
+conversation                      = the same linked history viewed through either interface
 ```
+
+We use *conversation* as the general term for what appears as a Codex session in the terminal and a
+Discord thread in Discord.
 
 pam stays running after you disconnect. It saves a complete, portable record of your work with
 Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
