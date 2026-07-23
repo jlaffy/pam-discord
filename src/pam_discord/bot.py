@@ -35,6 +35,13 @@ def _safe_name(value: str) -> str:
     return cleaned[:100] or "audio"
 
 
+def _clean_thread_title(value: str) -> str:
+    title = re.sub(r"^[#*_`\"'\s]+|[#*_`\"'\s]+$", "", value)
+    title = re.sub(r"\s+", " ", title).strip()
+    title = re.sub(r"^(?:title|thread title)\s*:\s*", "", title, flags=re.IGNORECASE)
+    return title[:80].rstrip()
+
+
 def _is_audio(attachment: discord.Attachment) -> bool:
     content_type = (attachment.content_type or "").lower()
     return (
@@ -387,6 +394,13 @@ class PamDiscord(discord.Client):
                     channel_config.workspace,
                     project_record[0] if project_record is not None else conversation_dir,
                 )
+                await self._name_discord_started_session(
+                    thread,
+                    session_id,
+                    prompt,
+                    channel_config.workspace,
+                    record_dir,
+                )
                 if project_record is not None:
                     project_conversation_dir, project_message_dir = project_record
                     shutil.copytree(record_dir, project_message_dir, dirs_exist_ok=True)
@@ -404,6 +418,79 @@ class PamDiscord(discord.Client):
                         f"Codex · {agent_record['created_at']}",
                         output,
                     )
+
+    async def _name_discord_started_session(
+        self,
+        discord_thread: discord.Thread,
+        codex_thread_id: str,
+        prompt: str,
+        workspace: Path,
+        record_dir: Path,
+    ) -> None:
+        """Give a Discord-started session one useful name in both clients."""
+        try:
+            result = await self._app_server.request(
+                "thread/read", {"threadId": codex_thread_id, "includeTurns": False}
+            )
+            value = result.get("thread") if isinstance(result, dict) else None
+            title = _clean_thread_title(str(value.get("name") or "")) if isinstance(value, dict) else ""
+            if not title:
+                title = await asyncio.to_thread(
+                    self._generate_thread_title,
+                    prompt,
+                    workspace,
+                    record_dir,
+                )
+            if not title:
+                return
+            await self._app_server.request(
+                "thread/name/set", {"threadId": codex_thread_id, "name": title}
+            )
+            if discord_thread.name != title:
+                await discord_thread.edit(name=title)
+        except Exception:
+            LOG.exception("failed to name shared session %s", codex_thread_id)
+
+    def _generate_thread_title(
+        self,
+        prompt: str,
+        workspace: Path,
+        record_dir: Path,
+    ) -> str:
+        title_path = record_dir / "codex-title.txt"
+        instruction = (
+            "Write a concise title for this coding-agent conversation. "
+            "Return only the title, with no quotation marks or punctuation wrapper. "
+            "Use 3 to 8 words and at most 80 characters.\n\n"
+            f"Conversation request:\n{prompt[:6000]}"
+        )
+        command = [
+            self.config.codex_binary,
+            "exec",
+            "--ephemeral",
+            "--sandbox",
+            "read-only",
+            "-C",
+            str(workspace),
+            "-o",
+            str(title_path),
+            "--",
+            instruction,
+        ]
+        result = subprocess.run(
+            command,
+            cwd=workspace,
+            capture_output=True,
+            text=True,
+            timeout=min(self.config.codex_timeout_seconds, 120),
+            check=False,
+            env={key: value for key, value in os.environ.items() if key != "OPENAI_API_KEY"},
+        )
+        if result.returncode != 0:
+            LOG.warning("Codex title generation failed: %s", result.stderr.strip()[-500:])
+            return ""
+        value = title_path.read_text(encoding="utf-8") if title_path.exists() else result.stdout
+        return _clean_thread_title(value)
 
     def _record_project_message(
         self,

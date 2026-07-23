@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from pam_discord.bot import (
     PamDiscord,
+    _clean_thread_title,
     _deliverable_paths,
     _disable_session_polling,
     _enable_session_polling,
@@ -139,3 +140,10 @@ def test_deliverables_are_limited_to_supported_project_files(tmp_path: Path) -> 
     text = f"See [plot]({plot}) and `{secret}` and `{source}` and [plot again]({plot}:12)."
 
     assert _deliverable_paths(text, workspace) == [plot]
+
+
+def test_generated_thread_titles_are_cleaned_and_limited() -> None:
+    assert _clean_thread_title('  **Title: Better Discord voice threads**\n') == (
+        "Better Discord voice threads"
+    )
+    assert len(_clean_thread_title("word " * 30)) <= 80
