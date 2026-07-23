@@ -7,6 +7,7 @@ import json
 import logging
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import socket
@@ -22,6 +23,10 @@ from .app_server import CodexAppServer, load_shared_sessions, save_shared_sessio
 from .config import ChannelConfig, Config, load_config
 
 LOG = logging.getLogger("pam_discord")
+LOCAL_DEVELOPER_TOOL_GUIDANCE = (
+    "For developer services such as GitHub, prefer authenticated local command-line tools "
+    "already available on this machine before requesting a separate connector."
+)
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
 DELIVERABLE_EXTENSIONS = {
     ".csv", ".docx", ".gif", ".html", ".jpeg", ".jpg", ".md", ".pdf",
@@ -48,6 +53,21 @@ def _is_audio(attachment: discord.Attachment) -> bool:
         content_type.startswith("audio/")
         or Path(attachment.filename).suffix.lower() in AUDIO_EXTENSIONS
     )
+
+
+def _remote_project_path(command: str) -> Path | None:
+    try:
+        parts = shlex.split(command)
+    except ValueError:
+        return None
+    if len(parts) != 4 or [value.lower() for value in parts[:3]] != ["pam", "project", "add"]:
+        return None
+    return Path(parts[3]).expanduser().resolve()
+
+
+def _allowed_project_roots(config: Config) -> set[Path]:
+    workspaces = [item.workspace for item in config.guilds.values()]
+    return {workspace.parent for workspace in workspaces}
 
 
 def _write_json(path: Path, value: object) -> None:
@@ -178,6 +198,10 @@ class PamDiscord(discord.Client):
             self.config.codex_app_server_url, self._handle_app_server_notification
         )
         self._link_watcher: asyncio.Task[None] | None = None
+        self._session_catalog_synced = False
+        self._project_setup_task: asyncio.Task[None] | None = None
+        self._directory_channel_lock = asyncio.Lock()
+        self._pending_discord_renames: dict[int, str] = {}
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -198,6 +222,9 @@ class PamDiscord(discord.Client):
             len(self.config.guilds),
             len(self.config.channels),
         )
+        if not self._session_catalog_synced:
+            self._session_catalog_synced = True
+            asyncio.create_task(self._sync_project_session_catalogs())
 
     def _channel_config(self, channel: discord.abc.Messageable) -> ChannelConfig | None:
         channel_id = getattr(channel, "id", None)
@@ -216,6 +243,10 @@ class PamDiscord(discord.Client):
         channel_config = self._channel_config(message.channel)
         if channel_config is None:
             return
+        project_path = _remote_project_path(message.content.strip())
+        if project_path is not None:
+            await self._start_remote_project_setup(message, project_path)
+            return
 
         audio = [item for item in message.attachments if _is_audio(item)]
         if not message.content.strip() and not audio:
@@ -232,6 +263,151 @@ class PamDiscord(discord.Client):
                 "I couldn't process that request. Check the bot log for details.",
                 mention_author=False,
             )
+
+    async def on_thread_update(
+        self, before: discord.Thread, after: discord.Thread
+    ) -> None:
+        if before.name == after.name:
+            return
+        expected = self._pending_discord_renames.get(after.id)
+        if expected == after.name:
+            self._pending_discord_renames.pop(after.id, None)
+            return
+        codex_thread_id = self._codex_thread_for_discord(after.id)
+        if codex_thread_id is None:
+            return
+        title = _clean_thread_title(after.name)
+        if not title:
+            return
+        try:
+            await self._app_server.request(
+                "thread/name/set", {"threadId": codex_thread_id, "name": title}
+            )
+        except Exception:
+            LOG.exception("failed to rename Codex conversation %s", codex_thread_id)
+
+    async def _start_remote_project_setup(
+        self, message: discord.Message, workspace: Path
+    ) -> None:
+        if self._project_setup_task is not None and not self._project_setup_task.done():
+            await message.reply(
+                "pam is already connecting another project. Finish that setup first.",
+                mention_author=False,
+            )
+            return
+        if not workspace.is_dir():
+            await message.reply(
+                f"That directory does not exist: `{workspace}`", mention_author=False
+            )
+            return
+        if any(item.workspace == workspace for item in self.config.guilds.values()):
+            await message.reply(
+                f"That project is already connected: `{workspace}`", mention_author=False
+            )
+            return
+        roots = _allowed_project_roots(self.config)
+        if not roots or not any(workspace.is_relative_to(root) for root in roots):
+            allowed = ", ".join(f"`{root}`" for root in sorted(roots))
+            await message.reply(
+                f"That directory is outside pam's allowed project roots: {allowed}",
+                mention_author=False,
+            )
+            return
+        if self.user is None:
+            await message.reply("pam is not connected to Discord yet.", mention_author=False)
+            return
+        from .setup import _discord_install_url
+
+        known_guild_ids = {guild.id for guild in self.guilds}
+        await message.reply(
+            "\n".join(
+                [
+                    f"Connecting `{workspace}`.",
+                    "",
+                    "1. [Create a Discord server](https://discord.com/channels/@me) "
+                    f"named **{workspace.name}**.",
+                    f"2. [Add pam to the new server]({_discord_install_url(str(self.user.id))}).",
+                    "",
+                    "pam will detect it and finish setup automatically. "
+                    "This request expires in 10 minutes.",
+                ]
+            ),
+            mention_author=False,
+        )
+        self._project_setup_task = asyncio.create_task(
+            self._finish_remote_project_setup(message, workspace, known_guild_ids)
+        )
+
+    async def _finish_remote_project_setup(
+        self,
+        message: discord.Message,
+        workspace: Path,
+        known_guild_ids: set[int],
+    ) -> None:
+        try:
+            for _ in range(300):
+                candidates = [
+                    guild
+                    for guild in self.guilds
+                    if guild.id not in known_guild_ids
+                    and guild.owner_id == message.author.id
+                ]
+                guild = next(
+                    (item for item in candidates if item.name == workspace.name),
+                    candidates[0] if len(candidates) == 1 else None,
+                )
+                if guild is not None:
+                    await self._configure_remote_project(message, workspace, guild)
+                    return
+                await asyncio.sleep(2)
+            await message.reply(
+                "Project setup expired before pam detected the new server. "
+                f"Send `pam project add {workspace}` to try again.",
+                mention_author=False,
+            )
+        except Exception:
+            LOG.exception("failed to connect remote project %s", workspace)
+            await message.reply(
+                "pam couldn't finish connecting that project. Check `pam service logs`.",
+                mention_author=False,
+            )
+
+    async def _configure_remote_project(
+        self,
+        message: discord.Message,
+        workspace: Path,
+        guild: discord.Guild,
+    ) -> None:
+        if self.config.config_path is None:
+            raise RuntimeError("pam configuration path is unavailable")
+        member = guild.me
+        if member is not None:
+            await member.edit(nick="pam")
+        channel = discord.utils.get(guild.text_channels, name="general")
+        if channel is None:
+            channel = await guild.create_text_channel(
+                "general", topic=f"pam workspace for {workspace}"
+            )
+        from .setup import _configure_project_archive_git, _project_config_block
+
+        with self.config.config_path.open("a", encoding="utf-8") as handle:
+            handle.write(_project_config_block(channel.id, guild.id, workspace))
+        _configure_project_archive_git(workspace, ignore=True)
+        channel_config = ChannelConfig(
+            workspace=workspace,
+            run_codex=True,
+            instruction_prefix="Follow this project's instructions.",
+            project_record_dir=workspace / ".pam" / "conversations",
+            project_root=workspace,
+        )
+        self.config.guilds[guild.id] = channel_config
+        self.config.channels[channel.id] = channel_config
+        await channel.send(
+            f"**pam** · `{workspace}` is connected. Send a message here to start a conversation."
+        )
+        await message.reply(
+            f"Project connected: {channel.jump_url}", mention_author=False
+        )
 
     async def _conversation_thread(self, message: discord.Message) -> discord.Thread:
         if isinstance(message.channel, discord.Thread):
@@ -303,7 +479,13 @@ class PamDiscord(discord.Client):
             if not prompt:
                 prompt = "[No speech detected]"
             agent_prompt = "\n\n".join(
-                part for part in (channel_config.instruction_prefix, prompt) if part
+                part
+                for part in (
+                    channel_config.instruction_prefix,
+                    LOCAL_DEVELOPER_TOOL_GUIDANCE,
+                    prompt,
+                )
+                if part
             )
 
             metadata = {
@@ -433,7 +615,11 @@ class PamDiscord(discord.Client):
                 "thread/read", {"threadId": codex_thread_id, "includeTurns": False}
             )
             value = result.get("thread") if isinstance(result, dict) else None
-            title = _clean_thread_title(str(value.get("name") or "")) if isinstance(value, dict) else ""
+            title = (
+                _clean_thread_title(str(value.get("name") or ""))
+                if isinstance(value, dict)
+                else ""
+            )
             if not title:
                 title = await asyncio.to_thread(
                     self._generate_thread_title,
@@ -447,7 +633,7 @@ class PamDiscord(discord.Client):
                 "thread/name/set", {"threadId": codex_thread_id, "name": title}
             )
             if discord_thread.name != title:
-                await discord_thread.edit(name=title)
+                await self._edit_discord_thread_name(discord_thread, title)
         except Exception:
             LOG.exception("failed to name shared session %s", codex_thread_id)
 
@@ -538,6 +724,32 @@ class PamDiscord(discord.Client):
                 return codex_thread_id
         return None
 
+    def _codex_thread_for_discord(self, discord_thread_id: int) -> str | None:
+        seen: set[Path] = set()
+        for channel_config in self.config.guilds.values():
+            if channel_config.workspace in seen:
+                continue
+            seen.add(channel_config.workspace)
+            codex_thread_id = self._shared_codex_thread(
+                channel_config.workspace, discord_thread_id
+            )
+            if codex_thread_id is not None:
+                return codex_thread_id
+        return None
+
+    async def _edit_discord_thread_name(
+        self, discord_thread: discord.Thread, title: str
+    ) -> None:
+        cleaned = _clean_thread_title(title)
+        if not cleaned or discord_thread.name == cleaned:
+            return
+        self._pending_discord_renames[discord_thread.id] = cleaned
+        try:
+            await discord_thread.edit(name=cleaned)
+        except Exception:
+            self._pending_discord_renames.pop(discord_thread.id, None)
+            raise
+
     def _workspace_config_for_cwd(self, cwd: Path) -> ChannelConfig | None:
         matches = [
             item
@@ -554,15 +766,75 @@ class PamDiscord(discord.Client):
         if method == "thread/started":
             thread_value = params.get("thread")
             if isinstance(thread_value, dict):
-                await self._link_started_codex_thread(thread_value)
+                if str(thread_value.get("name") or thread_value.get("preview") or "").strip():
+                    await self._link_started_codex_thread(thread_value)
+                else:
+                    asyncio.create_task(
+                        self._link_when_conversation_is_materialized(
+                            str(thread_value.get("id") or "")
+                        )
+                    )
                 self._record_app_server_event(str(thread_value.get("id") or ""), event)
         elif method == "item/completed":
             codex_thread_id = str(params.get("threadId") or "")
             self._stop_polling_live_session(codex_thread_id)
             self._record_app_server_event(codex_thread_id, event)
             await self._mirror_completed_codex_item(params)
+        elif method == "thread/name/updated":
+            codex_thread_id = str(params.get("threadId") or "")
+            title = _clean_thread_title(
+                str(params.get("threadName") or params.get("name") or "")
+            )
+            discord_thread_id = self._discord_thread_for_codex(codex_thread_id)
+            if discord_thread_id is not None and title:
+                discord_thread = self.get_channel(discord_thread_id)
+                if not isinstance(discord_thread, discord.Thread):
+                    try:
+                        discord_thread = await self.fetch_channel(discord_thread_id)
+                    except discord.HTTPException:
+                        discord_thread = None
+                if isinstance(discord_thread, discord.Thread):
+                    await self._edit_discord_thread_name(discord_thread, title)
+            self._record_app_server_event(codex_thread_id, event)
         else:
             self._record_app_server_event(str(params.get("threadId") or ""), event)
+
+    def _discord_thread_for_codex(self, codex_thread_id: str) -> int | None:
+        for channel_config in self.config.guilds.values():
+            discord_thread_id = load_shared_sessions(channel_config.workspace).get(
+                codex_thread_id
+            )
+            if discord_thread_id is not None:
+                return discord_thread_id
+        return None
+
+    async def _link_when_conversation_is_materialized(self, codex_thread_id: str) -> None:
+        if not codex_thread_id:
+            return
+        for _ in range(60):
+            try:
+                result = await self._app_server.request(
+                    "thread/read",
+                    {"threadId": codex_thread_id, "includeTurns": False},
+                )
+            except Exception:
+                LOG.exception(
+                    "failed waiting for Codex conversation %s", codex_thread_id
+                )
+                return
+            value = result.get("thread") if isinstance(result, dict) else None
+            if isinstance(value, dict) and str(
+                value.get("name") or value.get("preview") or ""
+            ).strip():
+                try:
+                    await self._link_started_codex_thread(value)
+                except Exception:
+                    LOG.exception(
+                        "failed to link materialized Codex conversation %s",
+                        codex_thread_id,
+                    )
+                return
+            await asyncio.sleep(0.5)
 
     def _stop_polling_live_session(self, codex_thread_id: str) -> None:
         if not codex_thread_id:
@@ -630,25 +902,53 @@ class PamDiscord(discord.Client):
                 except Exception:
                     LOG.exception("failed to sync Codex conversation %s", codex_thread_id)
 
+    async def _sync_project_session_catalogs(self) -> None:
+        """Create missing Discord threads for all saved sessions in connected projects."""
+        cursor: str | None = None
+        while True:
+            params: dict[str, object] = {
+                "sourceKinds": ["cli", "exec", "appServer"],
+                "archived": False,
+                "limit": 100,
+                "sortKey": "recency_at",
+                "sortDirection": "desc",
+            }
+            if cursor is not None:
+                params["cursor"] = cursor
+            try:
+                result = await self._app_server.request("thread/list", params)
+            except Exception:
+                LOG.exception("failed to list Codex conversations")
+                break
+            if not isinstance(result, dict):
+                break
+            for value in result.get("data", []):
+                if not isinstance(value, dict):
+                    continue
+                if not str(value.get("name") or value.get("preview") or "").strip():
+                    continue
+                try:
+                    await self._link_started_codex_thread(value)
+                except Exception:
+                    LOG.exception("failed to mirror Codex session %s", value.get("id"))
+            next_cursor = result.get("nextCursor")
+            if not isinstance(next_cursor, str) or not next_cursor:
+                break
+            cursor = next_cursor
+
     async def _link_started_codex_thread(self, value: dict[str, object]) -> None:
         codex_thread_id = str(value.get("id") or "")
         cwd_value = value.get("cwd")
         if not codex_thread_id or not isinstance(cwd_value, str):
             return
-        channel_config = self._workspace_config_for_cwd(Path(cwd_value).resolve())
+        cwd = Path(cwd_value).resolve()
+        channel_config = self._workspace_config_for_cwd(cwd)
         if channel_config is None:
             return
         sessions = load_shared_sessions(channel_config.workspace)
         if codex_thread_id in sessions:
             return
-        parent = next(
-            (
-                self.get_channel(channel_id)
-                for channel_id, item in self.config.channels.items()
-                if item.workspace == channel_config.workspace
-            ),
-            None,
-        )
+        parent = await self._conversation_parent_channel(channel_config, cwd)
         if not isinstance(parent, discord.TextChannel):
             LOG.warning("no default Discord channel for Codex thread %s", codex_thread_id)
             return
@@ -670,13 +970,79 @@ class PamDiscord(discord.Client):
                     "codex_thread_id": codex_thread_id,
                     "discord_thread_id": discord_thread.id,
                     "discord_parent_channel_id": parent.id,
-                    "workspace": str(channel_config.workspace),
+                    "workspace": str(cwd),
+                    "project_root": str(channel_config.workspace),
                     "created_at": datetime.now(UTC).isoformat(),
                     "source": "terminal",
                 },
             )
         await discord_thread.send("**pam** · Shared terminal and Discord Codex session connected.")
         await self._import_codex_history(codex_thread_id)
+
+    async def _conversation_parent_channel(
+        self, project_config: ChannelConfig, cwd: Path
+    ) -> discord.TextChannel | None:
+        project_root = project_config.workspace
+        existing = next(
+            (
+                self.get_channel(channel_id)
+                for channel_id, item in self.config.channels.items()
+                if item.workspace == cwd
+            ),
+            None,
+        )
+        if isinstance(existing, discord.TextChannel):
+            return existing
+        if cwd == project_root:
+            return None
+        async with self._directory_channel_lock:
+            existing = next(
+                (
+                    self.get_channel(channel_id)
+                    for channel_id, item in self.config.channels.items()
+                    if item.workspace == cwd
+                ),
+                None,
+            )
+            if isinstance(existing, discord.TextChannel):
+                return existing
+            guild_id = next(
+                (
+                    guild_id
+                    for guild_id, item in self.config.guilds.items()
+                    if item.workspace == project_root
+                ),
+                None,
+            )
+            guild = self.get_guild(guild_id) if guild_id is not None else None
+            if guild is None or self.config.config_path is None:
+                return None
+            from .setup import _channel_config_block, _channel_slug
+
+            relative = str(cwd.relative_to(project_root))
+            channel_name = _channel_slug(relative)
+            channel = discord.utils.get(guild.text_channels, name=channel_name)
+            if channel is None:
+                channel = await guild.create_text_channel(
+                    channel_name,
+                    topic=f"pam conversations in {cwd}",
+                )
+            with self.config.config_path.open("a", encoding="utf-8") as handle:
+                handle.write(
+                    _channel_config_block(
+                        channel.id,
+                        cwd,
+                        project_root=project_root,
+                    )
+                )
+            self.config.channels[channel.id] = ChannelConfig(
+                workspace=cwd,
+                run_codex=True,
+                instruction_prefix=project_config.instruction_prefix,
+                project_record_dir=project_config.project_record_dir,
+                project_root=project_root,
+            )
+            return channel
 
     async def _import_codex_history(self, codex_thread_id: str) -> None:
         result = await self._app_server.request(

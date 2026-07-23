@@ -72,7 +72,53 @@ def codex(argv: list[str]) -> None:
         "--remote",
         config.codex_app_server_url,
         "-C",
-        str(workspace),
+        str(cwd),
+        *codex_args,
+    ]
+    result = subprocess.run(command, check=False)
+    raise SystemExit(result.returncode)
+
+
+def resume(argv: list[str]) -> None:
+    parser = argparse.ArgumentParser(add_help=False)
+    parser.add_argument("--pam-state-dir", type=Path, default=DEFAULT_STATE_DIR)
+    known, codex_args = parser.parse_known_args(argv)
+    config = _config(known.pam_state_dir)
+    workspace = _project_for_path(config, Path.cwd().resolve())
+    binary = shutil.which(config.codex_binary)
+    if binary is None:
+        raise SystemExit(f"Codex executable not found: {config.codex_binary}")
+    try:
+        conversations = asyncio.run(
+            _project_conversations(config.codex_app_server_url, workspace)
+        )
+    except (aiohttp.ClientError, OSError) as exc:
+        raise SystemExit("pam is not running. Start it with `pam service start`.") from exc
+    if not conversations:
+        raise SystemExit(f"No active Codex conversations found in {workspace}")
+    use_last = "--last" in codex_args
+    codex_args = [value for value in codex_args if value != "--last"]
+    if use_last:
+        selected = conversations[0]
+    else:
+        print(f"Active conversations in {workspace}:\n")
+        for index, conversation in enumerate(conversations, start=1):
+            cwd = Path(str(conversation["cwd"])).resolve()
+            relative = "." if cwd == workspace else str(cwd.relative_to(workspace))
+            title = _conversation_title(conversation)
+            print(f"  {index}. {title}  [{relative}]")
+        choice = input("\nConversation number: ").strip()
+        try:
+            selected = conversations[int(choice) - 1]
+        except (ValueError, IndexError) as exc:
+            raise SystemExit("Invalid conversation number") from exc
+    command = [
+        binary,
+        "-C",
+        str(Path(str(selected["cwd"])).resolve()),
+        "resume",
+        "--include-non-interactive",
+        str(selected["id"]),
         *codex_args,
     ]
     result = subprocess.run(command, check=False)
@@ -107,6 +153,47 @@ async def _request(url: str, method: str, params: dict[str, object]) -> object:
                     if "error" in value:
                         raise RuntimeError(str(value["error"]))
                     return value.get("result")
+
+
+def _conversation_title(value: dict[str, object]) -> str:
+    name = str(value.get("name") or "").strip()
+    if name:
+        return " ".join(name.split())[:80]
+    lines = [
+        line.strip()
+        for line in str(value.get("preview") or "").splitlines()
+        if line.strip() and line.strip() != "Follow this project's instructions."
+    ]
+    return " ".join((lines[0] if lines else "Untitled conversation").split())[:80]
+
+
+async def _project_conversations(url: str, workspace: Path) -> list[dict[str, object]]:
+    conversations: list[dict[str, object]] = []
+    cursor: str | None = None
+    while True:
+        params: dict[str, object] = {
+            "sourceKinds": ["cli", "exec", "appServer"],
+            "archived": False,
+            "limit": 100,
+            "sortKey": "recency_at",
+            "sortDirection": "desc",
+        }
+        if cursor is not None:
+            params["cursor"] = cursor
+        result = await _request(url, "thread/list", params)
+        if not isinstance(result, dict):
+            break
+        for value in result.get("data", []):
+            if not isinstance(value, dict) or not isinstance(value.get("cwd"), str):
+                continue
+            cwd = Path(str(value["cwd"])).resolve()
+            if cwd == workspace or cwd.is_relative_to(workspace):
+                conversations.append(value)
+        next_cursor = result.get("nextCursor")
+        if not isinstance(next_cursor, str) or not next_cursor:
+            break
+        cursor = next_cursor
+    return conversations
 
 
 async def _link_latest(url: str, cwd: Path) -> str:

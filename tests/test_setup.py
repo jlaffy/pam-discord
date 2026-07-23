@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from pam_discord.config import load_config
 from pam_discord.setup import (
     DISCORD_BOT_PERMISSIONS,
+    _check_github_cli,
     _discord_install_url,
     _prepare_discord_workspace,
     doctor,
@@ -21,6 +23,21 @@ def test_whisper_defaults_fall_back_to_fast_cpu(monkeypatch: pytest.MonkeyPatch)
     monkeypatch.setattr("ctranslate2.get_cuda_device_count", lambda: 0)
 
     assert _whisper_defaults() == ("tiny.en", "cpu", "int8")
+
+
+def test_github_cli_check_reports_authenticated_account(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr("pam_discord.setup.shutil.which", lambda _name: "/bin/gh")
+    results = iter(
+        [
+            subprocess.CompletedProcess([], 0, stdout="", stderr=""),
+            subprocess.CompletedProcess([], 0, stdout="octocat\n", stderr=""),
+        ]
+    )
+    monkeypatch.setattr("pam_discord.setup.subprocess.run", lambda *_args, **_kwargs: next(results))
+
+    assert _check_github_cli() == (True, "authenticated as octocat")
 
 
 def test_setup_creates_private_single_project_configuration(

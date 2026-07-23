@@ -73,6 +73,15 @@ Follow the terminal instructions. pam gives you links to:
 
 Open the Discord link pam prints and send your first message.
 
+After connecting the first project, you can add another from Discord by sending:
+
+```text
+pam project add /path/to/project
+```
+
+Follow the two links pam provides. pam detects the new Discord server and finishes configuration
+automatically.
+
 ### 6. Use terminal and Discord shared sessions
 
 | Start a new linked conversation | Link one already in progress |
@@ -82,13 +91,17 @@ Open the Discord link pam prints and send your first message.
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
 
+Run `pam resume` inside a connected project to browse all its conversations, including ones that
+started in Discord. Use `pam resume` rather than `codex resume`: Codex normally hides
+non-interactive Discord starts, while pam intentionally presents both origins in one list.
+
 ## Done
 
 ```text
-Discord server = your project
-channel        = project conversation area
-thread         = persistent Codex session
-conversation   = saved prompts and transcripts from audio or text, plus replies
+project directory ↔ Discord server
+Codex session     ↔ Discord thread
+conversation      = the same linked history viewed through either interface
+channel           = a way to organize conversations within a Discord server
 ```
 
 pam stays running after you disconnect. Conversation history is saved in
@@ -106,10 +119,14 @@ If you also want to speak prompts on your Mac, you can optionally enable
 Questions, feedback, or ideas? Join the
 [pam discussions](https://github.com/jlaffy/pam-discord/discussions).
 
+See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex access,
+and macOS Dictation.
+
 ## Help
 
 ```bash
 pam doctor            # check Discord, Codex, and project setup
+pam resume            # browse every conversation for the current project
 pam service status    # check whether pam is running
 pam service logs      # show recent activity and errors
 pam service restart   # restart pam

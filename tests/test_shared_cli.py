@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from pam_discord.setup import _write_config
-from pam_discord.shared_cli import codex, link
+from pam_discord.shared_cli import codex, link, resume
 
 
 def test_pam_codex_connects_real_cli_to_shared_server(
@@ -51,6 +51,51 @@ def test_pam_codex_connects_real_cli_to_shared_server(
             "-C",
             str(workspace),
             "--yolo",
+        ]
+    ]
+
+
+def test_pam_codex_preserves_project_subdirectory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "state"
+    workspace = tmp_path / "project"
+    subdirectory = workspace / "packages" / "api"
+    state_dir.mkdir()
+    subdirectory.mkdir(parents=True)
+    _write_config(
+        state_dir / "config.toml",
+        state_dir=state_dir,
+        user_id=1,
+        channel_id=2,
+        guild_id=3,
+        workspace=workspace,
+    )
+    commands: list[list[str]] = []
+    monkeypatch.chdir(subdirectory)
+    monkeypatch.setattr("pam_discord.shared_cli.shutil.which", lambda _binary: "/bin/codex")
+
+    async def ready(_url: str) -> None:
+        return None
+
+    monkeypatch.setattr("pam_discord.shared_cli._wait_for_app_server", ready)
+    monkeypatch.setattr(
+        "pam_discord.shared_cli.subprocess.run",
+        lambda command, **_kwargs: (
+            commands.append(command) or subprocess.CompletedProcess(command, 0)
+        ),
+    )
+
+    with pytest.raises(SystemExit, match="0"):
+        codex(["--pam-state-dir", str(state_dir)])
+
+    assert commands == [
+        [
+            "/bin/codex",
+            "--remote",
+            "ws://127.0.0.1:45832",
+            "-C",
+            str(subdirectory),
         ]
     ]
 
@@ -121,3 +166,54 @@ def test_pam_codex_connects_current_directory_when_needed(
         codex(["--pam-state-dir", str(state_dir)])
 
     assert added == [[str(workspace), "--state-dir", str(state_dir)]]
+
+
+def test_pam_resume_includes_discord_started_sessions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "state"
+    workspace = tmp_path / "project"
+    state_dir.mkdir()
+    workspace.mkdir()
+    _write_config(
+        state_dir / "config.toml",
+        state_dir=state_dir,
+        user_id=1,
+        channel_id=2,
+        guild_id=3,
+        workspace=workspace,
+    )
+    commands: list[list[str]] = []
+    monkeypatch.chdir(workspace)
+    monkeypatch.setattr("pam_discord.shared_cli.shutil.which", lambda _binary: "/bin/codex")
+    monkeypatch.setattr(
+        "pam_discord.shared_cli.subprocess.run",
+        lambda command, **_kwargs: (
+            commands.append(command) or subprocess.CompletedProcess(command, 0)
+        ),
+    )
+    async def conversations(_url: str, _workspace: Path) -> list[dict[str, object]]:
+        return [
+            {
+                "id": "discord-conversation",
+                "cwd": str(workspace),
+                "name": "Discord conversation",
+            }
+        ]
+
+    monkeypatch.setattr("pam_discord.shared_cli._project_conversations", conversations)
+    monkeypatch.setattr("builtins.input", lambda _prompt: "1")
+
+    with pytest.raises(SystemExit, match="0"):
+        resume(["--pam-state-dir", str(state_dir)])
+
+    assert commands == [
+        [
+            "/bin/codex",
+            "-C",
+            str(workspace),
+            "resume",
+            "--include-non-interactive",
+            "discord-conversation",
+        ]
+    ]

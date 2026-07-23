@@ -8,6 +8,7 @@ import os
 import shutil
 import stat
 import subprocess
+import sys
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -116,15 +117,29 @@ project_record_dir = ".pam/conversations"
     _write_private(path, content)
 
 
-def _project_config_block(channel_id: int, guild_id: int, workspace: Path) -> str:
+def _channel_config_block(
+    channel_id: int,
+    workspace: Path,
+    *,
+    project_root: Path | None = None,
+) -> str:
+    root_line = (
+        f"project_root = {_toml_string(str(project_root))}\n"
+        if project_root is not None and project_root != workspace
+        else ""
+    )
     return f"""
 
 [channels.{_toml_string(str(channel_id))}]
 workspace = {_toml_string(str(workspace))}
-run_codex = true
+{root_line}run_codex = true
 instruction_prefix = "Follow this project's instructions."
 project_record_dir = ".pam/conversations"
+"""
 
+
+def _project_config_block(channel_id: int, guild_id: int, workspace: Path) -> str:
+    return _channel_config_block(channel_id, workspace) + f"""
 [guilds.{_toml_string(str(guild_id))}]
 workspace = {_toml_string(str(workspace))}
 run_codex = true
@@ -137,6 +152,62 @@ def _write_identity(state_dir: Path, user_id: int) -> None:
     path = state_dir / "identity.json"
     if not path.exists():
         _write_private(path, json.dumps({"discord_user_id": user_id}, indent=2) + "\n")
+
+
+def _check_github_cli() -> tuple[bool, str]:
+    binary = shutil.which("gh")
+    if binary is None:
+        return False, "not installed (optional)"
+    try:
+        status = subprocess.run(
+            [binary, "auth", "status"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False, "installed but status check failed (optional)"
+    if status.returncode != 0:
+        return False, "installed but not authenticated (optional)"
+    try:
+        account = subprocess.run(
+            [binary, "api", "user", "--jq", ".login"],
+            capture_output=True,
+            text=True,
+            timeout=20,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        account = None
+    login = account.stdout.strip() if account is not None and account.returncode == 0 else ""
+    return True, f"authenticated{f' as {login}' if login else ''}"
+
+
+def _configure_optional_developer_tools() -> None:
+    github_ok, detail = _check_github_cli()
+    if github_ok:
+        print(f"GitHub CLI detected: {detail}")
+        return
+    if shutil.which("gh") is None:
+        print("GitHub CLI not installed; skipping optional GitHub setup.")
+        return
+    if not sys.stdin.isatty():
+        print(f"GitHub CLI: {detail}")
+        return
+    answer = _ask("Configure the optional GitHub CLI now? (y/N)", "N").lower()
+    if answer not in {"y", "yes"}:
+        return
+    try:
+        result = subprocess.run([str(shutil.which("gh")), "auth", "login"], check=False)
+    except OSError:
+        print("GitHub CLI login could not start. You can run `gh auth login` later.")
+        return
+    if result.returncode != 0:
+        print("GitHub CLI login did not complete. You can run `gh auth login` later.")
+        return
+    github_ok, detail = _check_github_cli()
+    print(f"GitHub CLI: {detail}")
 
 
 def _setup_identity(args: argparse.Namespace) -> None:
@@ -158,6 +229,7 @@ def _setup_identity(args: argparse.Namespace) -> None:
         raise SystemExit("Discord bot token is required")
     _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
     _write_identity(state_dir, user_id)
+    _configure_optional_developer_tools()
     print("\npam identity saved. Connect a project with:")
     print("  ./pam project add /path/to/project")
 
@@ -607,6 +679,10 @@ def doctor(argv: list[str] | None = None) -> None:
         print(f"OK  Codex: {detail}")
     else:
         failures.append(f"Codex: {detail}")
+
+    github_ok, github_detail = _check_github_cli()
+    prefix = "OK  " if github_ok else "INFO"
+    print(f"{prefix} GitHub CLI: {github_detail}")
 
     if failures:
         for failure in failures:

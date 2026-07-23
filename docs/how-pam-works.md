@@ -112,6 +112,17 @@ be committed.
   that project directory and its Discord server.
 - **Discord project server:** the remote user interface for that project, hosted by Discord.
 
+## Terminology
+
+| General idea | On the remote computer | In Discord |
+| --- | --- | --- |
+| Project | Project directory | Discord server |
+| Conversation | Codex session | Discord thread |
+
+A **conversation** is the shared underlying history. It appears as a Codex session when you use the
+terminal and as a Discord thread when you use Discord. They are two interfaces to the same
+conversation.
+
 In one sentence:
 
 > pam is a self-hosted bridge that runs on the same remote computer as your projects and Codex,

@@ -4,19 +4,22 @@ import json
 import subprocess
 import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from pam_discord.bot import (
     PamDiscord,
+    _allowed_project_roots,
     _clean_thread_title,
     _deliverable_paths,
     _disable_session_polling,
     _enable_session_polling,
     _load_polled_sessions,
     _recently_mirrored,
+    _remote_project_path,
 )
 from pam_discord.app_server import save_shared_sessions
-from pam_discord.config import ChannelConfig, Config
+from pam_discord.config import ChannelConfig, Config, load_config
 
 
 def _bot(tmp_path: Path) -> PamDiscord:
@@ -147,3 +150,98 @@ def test_generated_thread_titles_are_cleaned_and_limited() -> None:
         "Better Discord voice threads"
     )
     assert len(_clean_thread_title("word " * 30)) <= 80
+
+
+def test_remote_project_command_parses_one_quoted_path(tmp_path: Path) -> None:
+    project = tmp_path / "project with spaces"
+
+    assert _remote_project_path(f'pam project add "{project}"') == project
+    assert _remote_project_path("please add a project") is None
+
+
+def test_remote_project_roots_are_limited_to_configured_project_parents(
+    tmp_path: Path,
+) -> None:
+    first = tmp_path / "owner" / "first"
+    second = tmp_path / "other-owner" / "second"
+    first.mkdir(parents=True)
+    second.mkdir(parents=True)
+    bot = _bot(tmp_path)
+    bot.config.guilds[1] = ChannelConfig(workspace=first)
+    bot.config.guilds[2] = ChannelConfig(workspace=second)
+
+    assert _allowed_project_roots(bot.config) == {first.parent, second.parent}
+
+
+def test_remote_project_configuration_is_persisted_and_available_immediately(
+    tmp_path: Path,
+) -> None:
+    existing = tmp_path / "existing"
+    workspace = tmp_path / "pam-vignettes"
+    state_dir = tmp_path / "state"
+    existing.mkdir()
+    workspace.mkdir()
+    state_dir.mkdir()
+    config_path = state_dir / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'archive_dir = "{state_dir / "archive"}"',
+                "allowed_user_ids = [1]",
+                "",
+                '[channels."20"]',
+                f'workspace = "{existing}"',
+                "run_codex = true",
+                "",
+                '[guilds."10"]',
+                f'workspace = "{existing}"',
+                "run_codex = true",
+                "",
+            ]
+        ),
+        encoding="utf-8",
+    )
+    bot = _bot(tmp_path)
+    object.__setattr__(bot.config, "config_path", config_path)
+    bot.config.guilds[10] = ChannelConfig(workspace=existing, project_root=existing)
+    sent: list[str] = []
+    replies: list[str] = []
+
+    class Member:
+        async def edit(self, *, nick: str) -> None:
+            assert nick == "pam"
+
+    class Channel:
+        id = 40
+        name = "general"
+        jump_url = "https://discord.com/channels/30/40"
+
+        async def send(self, text: str) -> None:
+            sent.append(text)
+
+    class Message:
+        async def reply(self, text: str, *, mention_author: bool) -> None:
+            assert mention_author is False
+            replies.append(text)
+
+    channel = Channel()
+    guild = SimpleNamespace(id=30, me=Member(), text_channels=[channel])
+
+    asyncio.run(
+        bot._configure_remote_project(
+            Message(),  # type: ignore[arg-type]
+            workspace,
+            guild,  # type: ignore[arg-type]
+        )
+    )
+
+    persisted = load_config(config_path)
+    assert persisted.guilds[30].workspace == workspace
+    assert persisted.channels[40].workspace == workspace
+    assert bot.config.guilds[30].workspace == workspace
+    assert bot.config.channels[40].workspace == workspace
+    assert (workspace / ".gitignore").read_text(encoding="utf-8") == ".pam/\n"
+    assert sent == [
+        f"**pam** · `{workspace}` is connected. Send a message here to start a conversation."
+    ]
+    assert replies == ["Project connected: https://discord.com/channels/30/40"]

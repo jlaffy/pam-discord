@@ -11,6 +11,7 @@ class ChannelConfig:
     run_codex: bool = False
     instruction_prefix: str = ""
     project_record_dir: Path | None = None
+    project_root: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,7 @@ class Config:
     instance_lock_dir: Path | None = None
     codex_full_access: bool = True
     whisper_beam_size: int = 1
+    config_path: Path | None = None
 
 
 def load_config(path: Path) -> Config:
@@ -45,19 +47,27 @@ def load_config(path: Path) -> Config:
         workspace = Path(item["workspace"]).expanduser().resolve()
         if not workspace.is_dir():
             raise ValueError(f"workspace for channel {channel_id} is not a directory: {workspace}")
+        project_root = Path(item.get("project_root", workspace)).expanduser().resolve()
+        if not project_root.is_dir() or (
+            workspace != project_root and not workspace.is_relative_to(project_root)
+        ):
+            raise ValueError(
+                f"project_root for channel {channel_id} must contain its workspace"
+            )
         record_value = item.get("project_record_dir")
         record_dir = None
         if record_value:
-            record_dir = (workspace / str(record_value)).resolve()
-            if not record_dir.is_relative_to(workspace):
+            record_dir = (project_root / str(record_value)).resolve()
+            if not record_dir.is_relative_to(project_root):
                 raise ValueError(
-                    f"project_record_dir for channel {channel_id} must stay inside its workspace"
+                    f"project_record_dir for channel {channel_id} must stay inside its project"
                 )
         channels[int(channel_id)] = ChannelConfig(
             workspace=workspace,
             run_codex=bool(item.get("run_codex", False)),
             instruction_prefix=str(item.get("instruction_prefix", "")).strip(),
             project_record_dir=record_dir,
+            project_root=project_root,
         )
     guilds: dict[int, ChannelConfig] = {}
     for guild_id, item in raw.get("guilds", {}).items():
@@ -75,6 +85,7 @@ def load_config(path: Path) -> Config:
             run_codex=bool(item.get("run_codex", False)),
             instruction_prefix=str(item.get("instruction_prefix", "")).strip(),
             project_record_dir=record_dir,
+            project_root=workspace,
         )
     if not channels and not guilds:
         raise ValueError("at least one Discord server or channel mapping is required")
@@ -106,4 +117,5 @@ def load_config(path: Path) -> Config:
         ),
         codex_full_access=bool(raw.get("codex_full_access", True)),
         whisper_beam_size=int(raw.get("whisper_beam_size", 1)),
+        config_path=path.expanduser().resolve(),
     )

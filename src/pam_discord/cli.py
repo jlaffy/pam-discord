@@ -4,7 +4,7 @@ import sys
 
 from . import bot
 from .service import service
-from .shared_cli import codex, link
+from .shared_cli import codex, link, resume
 from .setup import DEFAULT_STATE_DIR, doctor, project_add, setup
 
 
@@ -28,6 +28,9 @@ def main() -> None:
     if args and args[0] == "link":
         link(args[1:])
         return
+    if args and args[0] == "resume":
+        resume(args[1:])
+        return
     if args and args[0] == "run":
         run_args = args[1:]
         if not run_args:
@@ -47,6 +50,7 @@ def main() -> None:
             "  pam setup             Save your Discord identity and bot token once\n"
             "  pam project add PATH  Connect another project and Discord server\n"
             "  pam codex [OPTIONS]   Start a terminal and Discord shared session\n"
+            "  pam resume [OPTIONS]  Resume any project session, including Discord starts\n"
             "  pam link              Link the latest Codex conversation in this directory\n"
             "  pam doctor            Check configuration, Discord, and Codex\n"
             "  pam service           Manage the background service\n"
