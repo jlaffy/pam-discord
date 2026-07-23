@@ -75,7 +75,7 @@ Follow the terminal instructions. pam gives you links to:
 1. Create a new Discord server for the project.
 2. Add pam to the new Discord server.
 
-pam prints a Discord link to `#general`. Open it and send your first message.
+Open the Discord link pam prints and send your first message.
 
 ### 6. Use terminal and Discord shared sessions
 
@@ -86,12 +86,10 @@ pam prints a Discord link to `#general`. Open it and send your first message.
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
 
-### Optional: dictate prompts on a Mac
+### Optional: dictate on a Mac
 
-This is separate from the pam installation. macOS Dictation can turn speech into text directly in
-Discord's message box, after which you review and send the prompt normally.
-
-See [Set up macOS Dictation for pam](docs/macos-dictation.md).
+Voice messages work in Discord's mobile app; to dictate text in Discord or any other Mac app, see
+[Set up macOS Dictation](docs/macos-dictation.md).
 
 ## Done
 

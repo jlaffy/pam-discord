@@ -1,7 +1,7 @@
-# Optional: dictate pam prompts on macOS
+# Set up macOS Dictation
 
-This is an optional macOS feature, not part of the pam installation. It turns speech into text in
-Discord's normal message box. pam receives the resulting text, not the original audio.
+Dictation is an optional macOS feature, not part of pam. It turns speech into text anywhere you can
+type, including Discord's message box. Apps receive the resulting text, not the original audio.
 
 ## Set it up
 
@@ -11,10 +11,10 @@ Discord's normal message box. pam receives the resulting text, not the original 
    choice when available.
 4. Select your microphone and language if macOS asks.
 
-## Use it with pam
+## Use it
 
-1. Open a pam project in the Discord desktop app.
-2. Click the message box so the text cursor is visible.
+1. Open Discord or another Mac app.
+2. Click where you want to type so the text cursor is visible.
 3. Press your Dictation shortcut.
 4. After the tone or pulsing cursor, speak your prompt.
 5. Press the shortcut again, the microphone key, or **Escape** to stop.
