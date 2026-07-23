@@ -86,10 +86,8 @@ Open the Discord link pam prints and send your first message.
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
 
-### Optional: dictate on a Mac
-
-Voice messages work in Discord's mobile app; to dictate text in Discord or any other Mac app, see
-[Set up macOS Dictation](docs/macos-dictation.md).
+If you also want to speak prompts on your Mac, you can optionally enable
+[macOS Dictation](docs/macos-dictation.md).
 
 ## Done
 
