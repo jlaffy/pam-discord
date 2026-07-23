@@ -4,9 +4,9 @@ pam turns Discord into a remote interface for Codex on your own computer. Connec
 directory once, then continue the same conversations by text or voice, in the terminal or in
 Discord.
 
-pam automatically mirrors your project's active Codex conversations into Discord: project
-directories become servers, subdirectories become channels when needed, and Codex sessions become
-threads. Start anywhere and continue anywhere.
+pam automatically keeps your project's active conversations in sync between Codex and Discord:
+project directories become servers, subdirectories become channels when needed, and Codex sessions
+become threads. Start in the terminal or Discord and continue from either one.
 
 [Learn how pam, Discord, Codex, and your project directories fit
 together](docs/how-pam-works.md).
@@ -129,8 +129,8 @@ If you also want to speak prompts on your Mac, you can optionally enable
 Questions, feedback, or ideas? Join the
 [pam discussions](https://github.com/jlaffy/pam-discord/discussions).
 
-See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex access,
-and macOS Dictation.
+See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex
+permissions, and macOS Dictation.
 
 ## Help
 
