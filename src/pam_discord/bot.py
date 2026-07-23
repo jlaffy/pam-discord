@@ -932,7 +932,7 @@ class PamDiscord(discord.Client):
                 except Exception:
                     LOG.exception("failed to process pam link request %s", path)
             await self._sync_shared_sessions()
-            if time.monotonic() - self._last_catalog_sync >= 10:
+            if time.monotonic() - self._last_catalog_sync >= 60:
                 self._last_catalog_sync = time.monotonic()
                 await self._sync_project_session_catalogs()
             await asyncio.sleep(2)
