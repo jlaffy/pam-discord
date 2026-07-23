@@ -1,14 +1,10 @@
-# pam
-
-**pam** means **personal-agent-manager**.
+# pam (personal-agent-manager)
 
 pam is a self-hosted bridge that runs on the same remote computer as your projects and Codex,
 turning each Discord server into a remote interface for one project directory.
 
-Talk or type to Codex from Discord.
-
-pam enables shared Codex sessions between the Terminal and Discord, so you can continue the same
-Codex conversation from your phone.
+Talk or type to Codex from Discord. Start a linked Codex session in the terminal or Discord, then
+continue the same conversation from either one.
 
 [Learn how pam, Discord, Codex, and your project directories fit
 together](docs/how-pam-works.md).
@@ -106,6 +102,9 @@ Files over the Discord server's upload limit stay on the remote machine and pam 
 
 If you also want to speak prompts on your Mac, you can optionally enable
 [macOS Dictation](docs/macos-dictation.md).
+
+Questions, feedback, or ideas? Join the
+[pam discussions](https://github.com/jlaffy/pam-discord/discussions).
 
 ## Help
 
