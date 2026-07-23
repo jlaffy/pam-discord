@@ -86,9 +86,6 @@ Open the Discord link pam prints and send your first message.
 Both options create a Discord thread, preserve existing history, and continue the same session from
 the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
 
-If you also want to speak prompts on your Mac, you can optionally enable
-[macOS Dictation](docs/macos-dictation.md).
-
 ## Done
 
 ```text
@@ -106,6 +103,9 @@ pam runs Discord-started Codex work with full local access by default, equivalen
 running pam. Set `codex_full_access = false` in pam's `config.toml` to use Codex's normal sandbox.
 When Codex links to a supported file inside the project, pam uploads it to the conversation thread.
 Files over the Discord server's upload limit stay on the remote machine and pam reports their path.
+
+If you also want to speak prompts on your Mac, you can optionally enable
+[macOS Dictation](docs/macos-dictation.md).
 
 ## Help
 
