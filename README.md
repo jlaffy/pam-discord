@@ -130,9 +130,6 @@ If you also want to speak prompts on your Mac, you can optionally enable
 Questions, feedback, or ideas? Join the
 [pam discussions](https://github.com/jlaffy/pam-discord/discussions).
 
-To keep project servers together in Discord, drag one PAM server onto another, name the resulting
-folder `pam`, and choose a folder color.
-
 See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex
 permissions, and macOS Dictation.
 
