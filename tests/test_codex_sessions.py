@@ -16,7 +16,7 @@ from pam_discord.bot import (
     _enable_session_polling,
     _load_polled_sessions,
     _recently_mirrored,
-    _remote_project_path,
+    _remote_project_command,
 )
 from pam_discord.app_server import save_shared_sessions
 from pam_discord.config import ChannelConfig, Config, load_config
@@ -152,11 +152,15 @@ def test_generated_thread_titles_are_cleaned_and_limited() -> None:
     assert len(_clean_thread_title("word " * 30)) <= 80
 
 
-def test_remote_project_command_parses_one_quoted_path(tmp_path: Path) -> None:
+def test_remote_project_command_parses_add_and_create(tmp_path: Path) -> None:
     project = tmp_path / "project with spaces"
 
-    assert _remote_project_path(f'pam project add "{project}"') == project
-    assert _remote_project_path("please add a project") is None
+    assert _remote_project_command(f'pam project add "{project}"') == ("add", project)
+    assert _remote_project_command(f'pam project create "{project}"') == (
+        "create",
+        project,
+    )
+    assert _remote_project_command("please add a project") is None
 
 
 def test_remote_project_roots_are_limited_to_configured_project_parents(

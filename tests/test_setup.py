@@ -303,3 +303,41 @@ def test_identity_setup_once_then_add_multiple_projects(
     assert config.guilds[333].workspace == first
     assert config.guilds[555].workspace == second
     assert (state_dir / ".env").read_text() == "DISCORD_BOT_TOKEN=private-token\n"
+
+
+def test_project_create_makes_and_connects_new_directory(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "pam-state"
+    project = tmp_path / "new-project"
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+
+    project_add(
+        [str(project), "--state-dir", str(state_dir), "--ignore-history", "--no-service"],
+        create=True,
+    )
+
+    assert project.is_dir()
+    assert load_config(state_dir / "config.toml").guilds[333].workspace == project
+
+
+def test_project_create_rejects_existing_path(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "pam-state"
+    project = tmp_path / "existing-project"
+    project.mkdir()
+    state_dir.mkdir()
+    (state_dir / "identity.json").write_text('{"discord_user_id": 111}\n')
+    (state_dir / ".env").write_text("DISCORD_BOT_TOKEN=private-token\n")
+
+    with pytest.raises(SystemExit, match="already exists"):
+        project_add(
+            [str(project), "--state-dir", str(state_dir), "--no-service"],
+            create=True,
+        )

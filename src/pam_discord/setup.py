@@ -375,8 +375,18 @@ def setup(argv: list[str] | None = None) -> None:
     print(f"  {channel_url}")
 
 
-def project_add(argv: list[str] | None = None) -> None:
-    parser = argparse.ArgumentParser(description="Connect another project to pam")
+def project_add(
+    argv: list[str] | None = None,
+    *,
+    create: bool = False,
+) -> None:
+    parser = argparse.ArgumentParser(
+        description=(
+            "Create and connect a new project to pam"
+            if create
+            else "Connect another project to pam"
+        )
+    )
     parser.add_argument("project", type=Path)
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     history = parser.add_mutually_exclusive_group()
@@ -395,7 +405,16 @@ def project_add(argv: list[str] | None = None) -> None:
     if not token:
         raise SystemExit("Discord bot token is missing")
     workspace = args.project.expanduser().resolve()
-    if not workspace.is_dir():
+    if create:
+        if workspace.exists():
+            raise SystemExit(
+                f"Project path already exists: {workspace}\n"
+                "Use `pam project add PATH` to connect it."
+            )
+        if not workspace.parent.is_dir():
+            raise SystemExit(f"Parent directory does not exist: {workspace.parent}")
+        workspace.mkdir()
+    elif not workspace.is_dir():
         raise SystemExit(f"Project directory does not exist: {workspace}")
     config_path = state_dir / "config.toml"
     if config_path.exists():

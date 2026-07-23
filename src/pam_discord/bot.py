@@ -52,14 +52,18 @@ def _is_audio(attachment: discord.Attachment) -> bool:
     )
 
 
-def _remote_project_path(command: str) -> Path | None:
+def _remote_project_command(command: str) -> tuple[str, Path] | None:
     try:
         parts = shlex.split(command)
     except ValueError:
         return None
-    if len(parts) != 4 or [value.lower() for value in parts[:3]] != ["pam", "project", "add"]:
+    if (
+        len(parts) != 4
+        or [value.lower() for value in parts[:2]] != ["pam", "project"]
+        or parts[2].lower() not in {"add", "create"}
+    ):
         return None
-    return Path(parts[3]).expanduser().resolve()
+    return parts[2].lower(), Path(parts[3]).expanduser().resolve()
 
 
 def _allowed_project_roots(config: Config) -> set[Path]:
@@ -244,9 +248,14 @@ class PamDiscord(discord.Client):
         channel_config = self._channel_config(message.channel)
         if channel_config is None:
             return
-        project_path = _remote_project_path(message.content.strip())
-        if project_path is not None:
-            await self._start_remote_project_setup(message, project_path)
+        project_command = _remote_project_command(message.content.strip())
+        if project_command is not None:
+            action, project_path = project_command
+            await self._start_remote_project_setup(
+                message,
+                project_path,
+                create=action == "create",
+            )
             return
 
         audio = [item for item in message.attachments if _is_audio(item)]
@@ -288,7 +297,11 @@ class PamDiscord(discord.Client):
             LOG.exception("failed to rename Codex conversation %s", codex_thread_id)
 
     async def _start_remote_project_setup(
-        self, message: discord.Message, workspace: Path
+        self,
+        message: discord.Message,
+        workspace: Path,
+        *,
+        create: bool = False,
     ) -> None:
         if self._project_setup_task is not None and not self._project_setup_task.done():
             await message.reply(
@@ -296,7 +309,13 @@ class PamDiscord(discord.Client):
                 mention_author=False,
             )
             return
-        if not workspace.is_dir():
+        if create and workspace.exists():
+            await message.reply(
+                f"That path already exists: `{workspace}`. Use `pam project add` instead.",
+                mention_author=False,
+            )
+            return
+        if not create and not workspace.is_dir():
             await message.reply(
                 f"That directory does not exist: `{workspace}`", mention_author=False
             )
@@ -314,6 +333,14 @@ class PamDiscord(discord.Client):
                 mention_author=False,
             )
             return
+        if create:
+            if not workspace.parent.is_dir():
+                await message.reply(
+                    f"The parent directory does not exist: `{workspace.parent}`",
+                    mention_author=False,
+                )
+                return
+            workspace.mkdir()
         if self.user is None:
             await message.reply("pam is not connected to Discord yet.", mention_author=False)
             return

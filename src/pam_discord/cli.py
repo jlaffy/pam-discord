@@ -19,6 +19,9 @@ def main() -> None:
     if len(args) >= 2 and args[0] == "project" and args[1] == "add":
         project_add(args[2:])
         return
+    if len(args) >= 2 and args[0] == "project" and args[1] == "create":
+        project_add(args[2:], create=True)
+        return
     if args and args[0] == "service":
         service(args[1:])
         return
@@ -49,6 +52,7 @@ def main() -> None:
             "Commands:\n"
             "  pam setup             Save your Discord identity and bot token once\n"
             "  pam project add PATH  Connect another project and Discord server\n"
+            "  pam project create PATH  Create and connect a new project\n"
             "  pam codex [OPTIONS]   Start a terminal and Discord shared session\n"
             "  pam resume [OPTIONS]  Resume any project session, including Discord starts\n"
             "  pam link              Link the latest Codex conversation in this directory\n"

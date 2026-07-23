@@ -82,6 +82,13 @@ pam project add /path/to/project
 Follow the two links pam provides. pam detects the new Discord server and finishes configuration
 automatically.
 
+To create a new project directory and connect it in one step, use this command in Discord or the
+terminal:
+
+```text
+pam project create /path/to/new-project
+```
+
 ### 6. Use the same conversations in the terminal and Discord
 
 Start a terminal conversation with:
@@ -126,6 +133,9 @@ If you also want to speak prompts on your Mac, you can optionally enable
 
 Questions, feedback, or ideas? Join the
 [pam discussions](https://github.com/jlaffy/pam-discord/discussions).
+
+To keep project servers together in Discord, drag one PAM server onto another, name the resulting
+folder `pam`, and choose a folder color.
 
 See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex
 permissions, and macOS Dictation.
