@@ -5,7 +5,7 @@ directory once, then start or continue conversations by text or voice, in the te
 Discord: **project directories** become **Discord servers**, **subdirectories** become **channels**
 (where relevant), and **Codex sessions** become **threads**.
 
-pam keeps a complete, portable history of your prompts and conversations on your own computer, in
+pam also keeps a complete, portable history of your prompts and conversations on your computer, in
 human-readable Markdown and machine-readable JSONL.
 
 [Learn how pam, Discord, Codex, and your project directories fit
