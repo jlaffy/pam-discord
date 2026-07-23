@@ -1,12 +1,12 @@
 # pam (personal-agent-manager)
 
 pam turns Discord into a remote interface for Codex on your own computer. Connect a project
-directory once, then continue the same conversations by text or voice, in the terminal or in
+directory once, then start or continue conversations by text or voice, in the terminal or in
 Discord.
 
 pam automatically keeps your project's active conversations in sync between Codex and Discord:
 project directories become servers, subdirectories become channels when needed, and Codex sessions
-become threads. Start in the terminal or Discord and continue from either one.
+become threads.
 
 [Learn how pam, Discord, Codex, and your project directories fit
 together](docs/how-pam-works.md).
