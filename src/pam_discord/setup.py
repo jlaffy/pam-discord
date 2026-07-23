@@ -148,6 +148,14 @@ project_record_dir = ".pam/conversations"
 """
 
 
+def _hub_config_block(projects_root: Path) -> str:
+    return f"""
+
+[hub]
+projects_root = {_toml_string(str(projects_root))}
+"""
+
+
 def _write_identity(state_dir: Path, user_id: int) -> None:
     path = state_dir / "identity.json"
     if not path.exists():
@@ -230,8 +238,8 @@ def _setup_identity(args: argparse.Namespace) -> None:
     _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
     _write_identity(state_dir, user_id)
     _configure_optional_developer_tools()
-    print("\npam identity saved. Connect a project with:")
-    print("  ./pam project add /path/to/project")
+    print("\npam identity saved. Create your general pam server with:")
+    print("  pam hub create")
 
 
 def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
@@ -379,15 +387,29 @@ def project_add(
     argv: list[str] | None = None,
     *,
     create: bool = False,
+    hub: bool = False,
 ) -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "Create and connect a new project to pam"
-            if create
-            else "Connect another project to pam"
+            "Create the general pam Discord server"
+            if hub
+            else (
+                "Create and connect a new project to pam"
+                if create
+                else "Connect another project to pam"
+            )
         )
     )
-    parser.add_argument("project", type=Path)
+    parser.add_argument(
+        "project",
+        nargs="?" if hub else None,
+        type=Path,
+        help=(
+            "directory within which pam may connect or create projects"
+            if hub
+            else "project directory"
+        ),
+    )
     parser.add_argument("--state-dir", type=Path, default=DEFAULT_STATE_DIR)
     history = parser.add_mutually_exclusive_group()
     history.add_argument("--ignore-history", action="store_true")
@@ -404,12 +426,34 @@ def project_add(
     token = str(dotenv_values(env_path).get("DISCORD_BOT_TOKEN") or "")
     if not token:
         raise SystemExit("Discord bot token is missing")
-    workspace = args.project.expanduser().resolve()
-    if create:
+    project_argument = args.project
+    if hub and project_argument is None:
+        suggested = Path.cwd().resolve().parent
+        project_argument = Path(
+            _ask(
+                "Where should pam be allowed to connect or create project directories?",
+                str(suggested),
+            )
+        )
+        print("pam will only connect or create projects inside this location.")
+    assert project_argument is not None
+    requested_path = project_argument.expanduser().resolve()
+    projects_root: Path | None = None
+    if hub:
+        projects_root = requested_path
+        if not projects_root.is_dir():
+            raise SystemExit(
+                f"Directory for managed projects does not exist: {projects_root}"
+            )
+        workspace = state_dir / "hub"
+        workspace.mkdir(parents=True, exist_ok=True)
+    else:
+        workspace = requested_path
+    if create and not hub:
         if workspace.exists():
             raise SystemExit(
                 f"Project path already exists: {workspace}\n"
-                "Use `pam project add PATH` to connect it."
+                "Use `pam project connect PATH` to connect it."
             )
         if not workspace.parent.is_dir():
             raise SystemExit(f"Parent directory does not exist: {workspace.parent}")
@@ -419,9 +463,13 @@ def project_add(
     config_path = state_dir / "config.toml"
     if config_path.exists():
         existing = load_config(config_path)
+        if hub and existing.project_roots:
+            raise SystemExit("The general pam server is already configured.")
         if any(item.workspace == workspace for item in existing.guilds.values()):
             raise SystemExit(f"Project is already connected: {workspace}")
-    if args.ignore_history or args.track_history:
+    if hub:
+        ignore_history = True
+    elif args.ignore_history or args.track_history:
         ignore_history = args.ignore_history
     else:
         answer = _ask("Keep conversation history out of Git? (Y/n)", "Y").lower()
@@ -429,11 +477,24 @@ def project_add(
             raise SystemExit("Please answer Y or n")
         ignore_history = answer in {"y", "yes"}
     channel_id, guild_id, channel_url = _prepare_discord_workspace(
-        token, workspace, channel_id=None, guild_id=None, channel_name=None
+        token,
+        workspace,
+        channel_id=None,
+        guild_id=None,
+        channel_name=None,
+        server_name="pam" if hub else None,
+    )
+    config_suffix = (
+        _hub_config_block(projects_root)
+        if projects_root is not None
+        else ""
     )
     if config_path.exists():
         with config_path.open("a", encoding="utf-8") as handle:
-            handle.write(_project_config_block(channel_id, guild_id, workspace))
+            handle.write(
+                _project_config_block(channel_id, guild_id, workspace)
+                + config_suffix
+            )
     else:
         _write_config(
             config_path,
@@ -443,8 +504,12 @@ def project_add(
             guild_id=guild_id,
             workspace=workspace,
         )
-    _configure_project_archive_git(workspace, ignore=ignore_history)
-    print(f"\nProject connected: {workspace}")
+        if config_suffix:
+            with config_path.open("a", encoding="utf-8") as handle:
+                handle.write(config_suffix)
+    if not hub:
+        _configure_project_archive_git(workspace, ignore=ignore_history)
+    print(f"\n{'pam server ready' if hub else 'Project connected'}: {workspace}")
     print(f"Discord: {channel_url}")
     if args.no_service:
         return
@@ -543,6 +608,7 @@ def _prepare_discord_workspace(
     channel_id: int | None,
     guild_id: int | None,
     channel_name: str | None,
+    server_name: str | None = None,
 ) -> tuple[int, int, str]:
     try:
         bot_user = _discord_get(token, "/users/@me")
@@ -570,9 +636,10 @@ def _prepare_discord_workspace(
             f"https://discord.com/channels/{resolved_guild_id}/{channel_id}"
         )
 
-    print("\n1. Create a new Discord server for this project:")
+    display_name = server_name or workspace.name
+    print("\n1. Create a new Discord server:")
     print("  https://discord.com/channels/@me")
-    print(f"  In Discord, click +, choose Create My Own, and name it {workspace.name!r}.")
+    print(f"  In Discord, click +, choose Create My Own, and name it {display_name!r}.")
     if guild_id is None:
         input("\nPress Enter after the new server exists...")
 

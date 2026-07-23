@@ -20,7 +20,7 @@ file delivery → receive generated plots, presentations, documents, and tables 
 ## Start here
 
 > [!NOTE]
-> Steps 1–4 happen once. Repeat Step 5 for every project you connect.
+> Steps 1–5 happen once. Repeat Step 6 for every project you connect.
 
 ### 1. Install
 
@@ -56,40 +56,41 @@ pam setup
 
 Paste the Discord user ID and bot token from Steps 2–3.
 
-### 5. Connect a project
+### 5. Create your general pam server
 
-Replace the example path with your project directory:
+Run:
 
 ```bash
-pam project add /ewsc/jlaffy/agent-native-genomics
+pam hub create
 ```
 
-Choose whether `.pam/` conversation history is ignored by Git or can be committed.
+When asked where pam may connect or create project directories, choose the directory containing
+your projects. pam suggests the parent of the cloned `pam-discord` repository.
 
-Follow the terminal instructions. pam gives you links to:
+Follow the two links to create a Discord server named `pam` and add the bot. This is your general
+server for conversations that do not belong to a project and for managing project servers.
 
-1. Create a new Discord server for the project.
-2. Add pam to the new Discord server.
+### 6. Connect or create projects
 
-Open the Discord link pam prints and send your first message.
-
-After connecting the first project, you can add another from Discord by sending:
+From the general `pam` server, connect an existing project:
 
 ```text
-pam project add /path/to/project
+pam project connect /path/to/existing-project
 ```
 
 Follow the two links pam provides. pam detects the new Discord server and finishes configuration
 automatically.
 
-To create a new project directory and connect it in one step, use this command in Discord or the
-terminal:
+Or create a new project directory and connect it in one step:
 
 ```text
 pam project create /path/to/new-project
 ```
 
-### 6. Use the same conversations in the terminal and Discord
+Both commands also work in the terminal. When connecting an existing project, choose whether
+`.pam/` conversation history is ignored by Git or can be committed.
+
+### 7. Use the same conversations in the terminal and Discord
 
 Start a terminal conversation with:
 

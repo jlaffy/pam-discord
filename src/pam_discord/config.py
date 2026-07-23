@@ -32,6 +32,7 @@ class Config:
     codex_full_access: bool = True
     whisper_beam_size: int = 1
     config_path: Path | None = None
+    project_roots: tuple[Path, ...] = ()
 
 
 def load_config(path: Path) -> Config:
@@ -89,6 +90,13 @@ def load_config(path: Path) -> Config:
         )
     if not channels and not guilds:
         raise ValueError("at least one Discord server or channel mapping is required")
+    project_roots: tuple[Path, ...] = ()
+    hub = raw.get("hub")
+    if isinstance(hub, dict) and hub.get("projects_root"):
+        projects_root = Path(str(hub["projects_root"])).expanduser().resolve()
+        if not projects_root.is_dir():
+            raise ValueError(f"hub projects_root is not a directory: {projects_root}")
+        project_roots = (projects_root,)
 
     max_mb = int(raw.get("max_attachment_mb", 25))
     max_seconds = int(raw.get("max_audio_seconds", 1800))
@@ -118,4 +126,5 @@ def load_config(path: Path) -> Config:
         codex_full_access=bool(raw.get("codex_full_access", True)),
         whisper_beam_size=int(raw.get("whisper_beam_size", 1)),
         config_path=path.expanduser().resolve(),
+        project_roots=project_roots,
     )

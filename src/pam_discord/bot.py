@@ -60,13 +60,19 @@ def _remote_project_command(command: str) -> tuple[str, Path] | None:
     if (
         len(parts) != 4
         or [value.lower() for value in parts[:2]] != ["pam", "project"]
-        or parts[2].lower() not in {"add", "create"}
+        or parts[2].lower() not in {"add", "connect", "create"}
     ):
         return None
-    return parts[2].lower(), Path(parts[3]).expanduser().resolve()
+    action = parts[2].lower()
+    return (
+        "create" if action == "create" else "connect",
+        Path(parts[3]).expanduser().resolve(),
+    )
 
 
 def _allowed_project_roots(config: Config) -> set[Path]:
+    if config.project_roots:
+        return set(config.project_roots)
     workspaces = [item.workspace for item in config.guilds.values()]
     return {workspace.parent for workspace in workspaces}
 

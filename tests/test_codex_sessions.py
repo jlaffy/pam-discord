@@ -155,7 +155,14 @@ def test_generated_thread_titles_are_cleaned_and_limited() -> None:
 def test_remote_project_command_parses_add_and_create(tmp_path: Path) -> None:
     project = tmp_path / "project with spaces"
 
-    assert _remote_project_command(f'pam project add "{project}"') == ("add", project)
+    assert _remote_project_command(f'pam project add "{project}"') == (
+        "connect",
+        project,
+    )
+    assert _remote_project_command(f'pam project connect "{project}"') == (
+        "connect",
+        project,
+    )
     assert _remote_project_command(f'pam project create "{project}"') == (
         "create",
         project,

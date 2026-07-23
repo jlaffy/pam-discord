@@ -341,3 +341,32 @@ def test_project_create_rejects_existing_path(
             [str(project), "--state-dir", str(state_dir), "--no-service"],
             create=True,
         )
+
+
+def test_hub_create_uses_private_workspace_and_approved_project_root(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    state_dir = tmp_path / "pam-state"
+    projects_root = tmp_path / "projects"
+    projects_root.mkdir()
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+
+    project_add(
+        [
+            str(projects_root),
+            "--state-dir",
+            str(state_dir),
+            "--no-service",
+        ],
+        hub=True,
+    )
+
+    config = load_config(state_dir / "config.toml")
+    assert config.guilds[333].workspace == state_dir / "hub"
+    assert config.project_roots == (projects_root,)
+    assert (state_dir / "hub").is_dir()

@@ -19,8 +19,14 @@ def main() -> None:
     if len(args) >= 2 and args[0] == "project" and args[1] == "add":
         project_add(args[2:])
         return
+    if len(args) >= 2 and args[0] == "project" and args[1] == "connect":
+        project_add(args[2:])
+        return
     if len(args) >= 2 and args[0] == "project" and args[1] == "create":
         project_add(args[2:], create=True)
+        return
+    if len(args) >= 2 and args[0] == "hub" and args[1] == "create":
+        project_add(args[2:], hub=True)
         return
     if args and args[0] == "service":
         service(args[1:])
@@ -51,7 +57,9 @@ def main() -> None:
             "pam connects Discord to Codex sessions on this remote computer.\n\n"
             "Commands:\n"
             "  pam setup             Save your Discord identity and bot token once\n"
-            "  pam project add PATH  Connect another project and Discord server\n"
+            "  pam hub create PATH   Create the general pam server\n"
+            "  pam project connect PATH  Connect an existing project\n"
+            "  pam project add PATH  Alias for project connect\n"
             "  pam project create PATH  Create and connect a new project\n"
             "  pam codex [OPTIONS]   Start a terminal and Discord shared session\n"
             "  pam resume [OPTIONS]  Resume any project session, including Discord starts\n"
