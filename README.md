@@ -61,29 +61,25 @@ Paste the Discord user ID and bot token from Steps 2–3. When asked:
 > **Where should pam be allowed to connect or create project directories?**
 
 choose the directory containing your projects. pam suggests the parent of the cloned `pam-discord`
-repository. Then follow the two links to create a general Discord server named `pam` and add the
-bot. Use this server for conversations that do not belong to a project and for managing project
-servers.
+repository. Follow the two links to create a Discord server named `pam` and add the bot.
+
+```text
+general pam server → general conversations and project management
+project server     → one project directory and its project-specific work
+```
 
 ### 5. Connect or create projects
 
-From the general `pam` server, connect an existing project:
+From the general `pam` server—or the terminal—connect an existing project or create a new one:
 
 ```text
 pam project connect /path/to/existing-project
-```
-
-Follow the two links pam provides. pam detects the new Discord server and finishes configuration
-automatically.
-
-Or create a new project directory and connect it in one step:
-
-```text
 pam project create /path/to/new-project
 ```
 
-Both commands also work in the terminal. When connecting an existing project, choose whether
-`.pam/` conversation history is ignored by Git or can be committed.
+Follow the two links; pam detects the new project server and finishes configuration automatically.
+When connecting an existing project, choose whether `.pam/` conversation history is ignored by Git
+or can be committed.
 
 ## Done
 
