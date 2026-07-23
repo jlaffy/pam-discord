@@ -85,22 +85,6 @@ pam project create /path/to/new-project
 Both commands also work in the terminal. When connecting an existing project, choose whether
 `.pam/` conversation history is ignored by Git or can be committed.
 
-### 6. Use the same conversations in the terminal and Discord
-
-Start a terminal conversation with:
-
-```bash
-pam codex --yolo
-```
-
-You can also use Codex normally inside a connected project. pam automatically discovers active
-conversations and mirrors them into Discord. Root conversations appear in `#general`; conversations
-started in subdirectories appear in channels created for those directories.
-
-Run `pam resume` inside a connected project to browse all its conversations, including ones that
-started in Discord. Use `pam resume` rather than `codex resume`: Codex normally hides
-non-interactive Discord starts, while pam intentionally presents both origins in one list.
-
 ## Done
 
 ```text
@@ -112,6 +96,11 @@ conversation                      = the same linked history viewed through eithe
 
 We use *conversation* as the general term for what appears as a Codex session in the terminal and a
 Discord thread in Discord.
+
+Start a terminal conversation with `pam codex --yolo`, or use Codex normally inside a connected
+project. pam automatically mirrors active conversations into Discord, using `#general` for the
+project root and creating channels for subdirectories when needed. Use `pam resume` to browse
+conversations that started in either the terminal or Discord.
 
 pam stays running after you disconnect. It saves a complete, portable record of your work with
 Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
