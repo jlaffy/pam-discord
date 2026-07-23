@@ -290,7 +290,7 @@ def test_identity_setup_once_then_add_multiple_projects(
         "pam_discord.setup._prepare_discord_workspace", lambda *_args, **_kwargs: next(created)
     )
 
-    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+    setup(["--state-dir", str(state_dir), "--user-id", "111", "--identity-only"])
     project_add(
         [str(first), "--state-dir", str(state_dir), "--ignore-history", "--no-service"]
     )
@@ -315,7 +315,7 @@ def test_project_create_makes_and_connects_new_directory(
         "pam_discord.setup._prepare_discord_workspace",
         lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
     )
-    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+    setup(["--state-dir", str(state_dir), "--user-id", "111", "--identity-only"])
 
     project_add(
         [str(project), "--state-dir", str(state_dir), "--ignore-history", "--no-service"],
@@ -354,7 +354,7 @@ def test_hub_create_uses_private_workspace_and_approved_project_root(
         "pam_discord.setup._prepare_discord_workspace",
         lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
     )
-    setup(["--state-dir", str(state_dir), "--user-id", "111"])
+    setup(["--state-dir", str(state_dir), "--user-id", "111", "--identity-only"])
 
     project_add(
         [

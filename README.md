@@ -22,7 +22,7 @@ file delivery            → receive and easily view generated files in Discord
 ## Start here
 
 > [!NOTE]
-> Steps 1–5 happen once. Repeat Step 6 for every project you connect.
+> Steps 1–4 happen once. Repeat Step 5 for every project you connect.
 
 ### 1. Install
 
@@ -56,23 +56,16 @@ codex login
 pam setup
 ```
 
-Paste the Discord user ID and bot token from Steps 2–3.
+Paste the Discord user ID and bot token from Steps 2–3. When asked:
 
-### 5. Create your general pam server
+> **Where should pam be allowed to connect or create project directories?**
 
-Run:
+choose the directory containing your projects. pam suggests the parent of the cloned `pam-discord`
+repository. Then follow the two links to create a general Discord server named `pam` and add the
+bot. Use this server for conversations that do not belong to a project and for managing project
+servers.
 
-```bash
-pam hub create
-```
-
-When asked where pam may connect or create project directories, choose the directory containing
-your projects. pam suggests the parent of the cloned `pam-discord` repository.
-
-Follow the two links to create a Discord server named `pam` and add the bot. This is your general
-server for conversations that do not belong to a project and for managing project servers.
-
-### 6. Connect or create projects
+### 5. Connect or create projects
 
 From the general `pam` server, connect an existing project:
 
@@ -92,7 +85,7 @@ pam project create /path/to/new-project
 Both commands also work in the terminal. When connecting an existing project, choose whether
 `.pam/` conversation history is ignored by Git or can be committed.
 
-### 7. Use the same conversations in the terminal and Discord
+### 6. Use the same conversations in the terminal and Discord
 
 Start a terminal conversation with:
 

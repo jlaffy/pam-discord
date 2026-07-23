@@ -227,8 +227,23 @@ def _setup_identity(args: argparse.Namespace) -> None:
     state_dir.chmod(stat.S_IRWXU)
     env_path = state_dir / ".env"
     identity_path = state_dir / "identity.json"
+    config_path = state_dir / "config.toml"
     if env_path.exists() or identity_path.exists():
-        raise SystemExit("pam is already set up. Add a project with `./pam project add PATH`.")
+        if (
+            env_path.exists()
+            and identity_path.exists()
+            and not config_path.exists()
+            and not args.identity_only
+        ):
+            project_args = ["--state-dir", str(state_dir)]
+            if args.no_service:
+                project_args.append("--no-service")
+            project_add(project_args, hub=True)
+            return
+        raise SystemExit(
+            "pam is already set up. Connect a project with "
+            "`pam project connect PATH`."
+        )
     user_id = _positive_id(
         str(args.user_id or _ask("Your Discord user ID")), "Discord user ID"
     )
@@ -238,8 +253,14 @@ def _setup_identity(args: argparse.Namespace) -> None:
     _write_private(env_path, f"DISCORD_BOT_TOKEN={token}\n")
     _write_identity(state_dir, user_id)
     _configure_optional_developer_tools()
-    print("\npam identity saved. Create your general pam server with:")
-    print("  pam hub create")
+    if args.identity_only:
+        print("\npam identity saved.")
+        return
+    print("\npam identity saved. Now create your general pam server.")
+    project_args = ["--state-dir", str(state_dir)]
+    if args.no_service:
+        project_args.append("--no-service")
+    project_add(project_args, hub=True)
 
 
 def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
@@ -275,6 +296,7 @@ def setup(argv: list[str] | None = None) -> None:
     parser.add_argument("--channel-id")
     parser.add_argument("--guild-id")
     parser.add_argument("--channel-name")
+    parser.add_argument("--identity-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--no-service", action="store_true", help="Configure pam without installing systemd"
     )
