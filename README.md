@@ -2,21 +2,19 @@
 
 pam turns Discord into a remote interface for Codex on your own computer. Connect a project
 directory once, then start or continue conversations by text or voice, in the terminal or in
-Discord.
+Discord: **project directories** become **Discord servers**, **subdirectories** become **channels**
+(where relevant), and **Codex sessions** become **threads**.
 
-pam automatically keeps your project's active conversations in sync between Codex and Discord:
-project directories become servers, subdirectories become channels when needed, and Codex sessions
-become threads.
+pam keeps a complete, portable history of your prompts and conversations on your own computer, in
+human-readable Markdown and machine-readable JSONL.
 
 [Learn how pam, Discord, Codex, and your project directories fit
 together](docs/how-pam-works.md).
 
 ```text
-shared conversations → start in the terminal or Discord and continue from either one
-complete records     → save prompts, responses, transcripts, and agent events in Markdown and JSONL
-remote access        → reach your remote computer and Codex through Discord
-fast voice           → transcribe voice notes using the fastest reliable CPU or GPU mode detected
-file delivery        → receive generated plots, presentations, documents, and tables in Discord
+remote access → reach your remote computer and Codex through Discord
+fast voice    → transcribe voice notes using the fastest reliable CPU or GPU mode detected
+file delivery → receive generated plots, presentations, documents, and tables in Discord
 ```
 
 ## Start here
