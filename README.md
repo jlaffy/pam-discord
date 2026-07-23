@@ -64,8 +64,8 @@ choose the directory containing your projects. pam suggests the parent of the cl
 repository. Follow the two links to create a Discord server named `pam` and add the bot.
 
 ```text
-general pam server → general conversations and project management
-project server     → one project directory and its project-specific work
+general server → general conversations and project management
+project server → one project directory and its project-specific work
 ```
 
 ### 5. Connect or create projects
