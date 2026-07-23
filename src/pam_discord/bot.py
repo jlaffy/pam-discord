@@ -204,6 +204,7 @@ class PamDiscord(discord.Client):
         self._pending_discord_renames: dict[int, str] = {}
         self._linking_codex_threads: set[str] = set()
         self._last_catalog_sync = 0.0
+        self._membership_synced_threads: set[int] = set()
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -434,16 +435,28 @@ class PamDiscord(discord.Client):
     ) -> None:
         if message.guild is None:
             return
+        await self._add_authorized_thread_members(
+            thread, message.guild, exclude={message.author.id}
+        )
+
+    async def _add_authorized_thread_members(
+        self,
+        thread: discord.Thread,
+        guild: discord.Guild,
+        *,
+        exclude: set[int] | None = None,
+    ) -> None:
         for user_id in self.config.allowed_user_ids:
-            if user_id == message.author.id:
+            if exclude is not None and user_id in exclude:
                 continue
             try:
-                member = message.guild.get_member(user_id)
+                member = guild.get_member(user_id)
                 if member is None:
-                    member = await message.guild.fetch_member(user_id)
+                    member = await guild.fetch_member(user_id)
                 await thread.add_user(member)
             except (discord.Forbidden, discord.HTTPException, discord.NotFound):
                 LOG.warning("could not add authorized user %s to thread %s", user_id, thread.id)
+        self._membership_synced_threads.add(thread.id)
 
     async def _handle_message(
         self,
@@ -963,6 +976,7 @@ class PamDiscord(discord.Client):
             return
         sessions = load_shared_sessions(channel_config.workspace)
         if codex_thread_id in sessions:
+            await self._ensure_authorized_thread_members(sessions[codex_thread_id])
             return
         parent = await self._conversation_parent_channel(channel_config, cwd)
         if not isinstance(parent, discord.TextChannel):
@@ -974,6 +988,10 @@ class PamDiscord(discord.Client):
             name=title,
             auto_archive_duration=1440,
             type=discord.ChannelType.public_thread,
+        )
+        await self._add_authorized_thread_members(
+            discord_thread,
+            parent.guild,
         )
         sessions[codex_thread_id] = discord_thread.id
         save_shared_sessions(channel_config.workspace, sessions)
@@ -994,6 +1012,18 @@ class PamDiscord(discord.Client):
             )
         await discord_thread.send("**pam** · Shared terminal and Discord Codex session connected.")
         await self._import_codex_history(codex_thread_id)
+
+    async def _ensure_authorized_thread_members(self, discord_thread_id: int) -> None:
+        if discord_thread_id in self._membership_synced_threads:
+            return
+        thread = self.get_channel(discord_thread_id)
+        if not isinstance(thread, discord.Thread):
+            try:
+                thread = await self.fetch_channel(discord_thread_id)
+            except discord.HTTPException:
+                return
+        if isinstance(thread, discord.Thread):
+            await self._add_authorized_thread_members(thread, thread.guild)
 
     async def _conversation_parent_channel(
         self, project_config: ChannelConfig, cwd: Path
