@@ -1,20 +1,22 @@
 # pam (personal-agent-manager)
 
-pam is a self-hosted bridge that runs on the same remote computer as your projects and Codex,
-turning each Discord server into a remote interface for one project directory.
+pam turns Discord into a remote interface for Codex on your own computer. Connect a project
+directory once, then continue the same conversations by text or voice, in the terminal or in
+Discord.
 
-Talk or type to Codex from Discord. Start a linked Codex session in the terminal or Discord, then
-continue the same conversation from either one.
+pam automatically mirrors your project's active Codex conversations into Discord: project
+directories become servers, subdirectories become channels when needed, and Codex sessions become
+threads. Start anywhere and continue anywhere.
 
 [Learn how pam, Discord, Codex, and your project directories fit
 together](docs/how-pam-works.md).
 
 ```text
-remote access       → reach your remote server and Codex through Discord on your phone or computer
-complete records    → prompts and conversation transcripts saved from audio or text
-shared sessions     → continue in the terminal or Discord
-file delivery       → receive generated plots, presentations, documents, and tables in Discord
-fast voice          → transcribe voice notes using the fastest reliable CPU or GPU mode detected
+shared conversations → start in the terminal or Discord and continue from either one
+complete records     → save prompts, responses, transcripts, and agent events in Markdown and JSONL
+remote access        → reach your remote computer and Codex through Discord
+fast voice           → transcribe voice notes using the fastest reliable CPU or GPU mode detected
+file delivery        → receive generated plots, presentations, documents, and tables in Discord
 ```
 
 ## Start here
@@ -82,14 +84,17 @@ pam project add /path/to/project
 Follow the two links pam provides. pam detects the new Discord server and finishes configuration
 automatically.
 
-### 6. Use terminal and Discord shared sessions
+### 6. Use the same conversations in the terminal and Discord
 
-| Start a new linked conversation | Link one already in progress |
-| --- | --- |
-| `pam codex --yolo` | Ask Codex: `Link this conversation to pam` |
+Start a terminal conversation with:
 
-Both options create a Discord thread, preserve existing history, and continue the same session from
-the terminal or Discord. Normal Codex options still work—for example, `pam codex --yolo`.
+```bash
+pam codex --yolo
+```
+
+You can also use Codex normally inside a connected project. pam automatically discovers active
+conversations and mirrors them into Discord. Root conversations appear in `#general`; conversations
+started in subdirectories appear in channels created for those directories.
 
 Run `pam resume` inside a connected project to browse all its conversations, including ones that
 started in Discord. Use `pam resume` rather than `codex resume`: Codex normally hides
@@ -104,8 +109,10 @@ conversation      = the same linked history viewed through either interface
 channel           = a way to organize conversations within a Discord server
 ```
 
-pam stays running after you disconnect. Conversation history is saved in
-`<project>/.pam/conversations/`. During setup, you choose whether Git ignores or tracks it.
+pam stays running after you disconnect. It saves a complete, portable record of your work with
+Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
+prompts, responses, voice transcripts, and agent events. Project history lives in
+`<project>/.pam/conversations/`; during setup, you choose whether Git ignores or tracks it.
 
 pam runs Discord-started Codex work with full local access by default, equivalent to
 `codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user

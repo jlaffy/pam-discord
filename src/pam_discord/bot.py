@@ -11,6 +11,7 @@ import shlex
 import shutil
 import subprocess
 import socket
+import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -23,10 +24,6 @@ from .app_server import CodexAppServer, load_shared_sessions, save_shared_sessio
 from .config import ChannelConfig, Config, load_config
 
 LOG = logging.getLogger("pam_discord")
-LOCAL_DEVELOPER_TOOL_GUIDANCE = (
-    "For developer services such as GitHub, prefer authenticated local command-line tools "
-    "already available on this machine before requesting a separate connector."
-)
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
 DELIVERABLE_EXTENSIONS = {
     ".csv", ".docx", ".gif", ".html", ".jpeg", ".jpg", ".md", ".pdf",
@@ -498,7 +495,6 @@ class PamDiscord(discord.Client):
                 part
                 for part in (
                     channel_config.instruction_prefix,
-                    LOCAL_DEVELOPER_TOOL_GUIDANCE,
                     prompt,
                 )
                 if part
@@ -1012,6 +1008,39 @@ class PamDiscord(discord.Client):
             )
         await discord_thread.send("**pam** · Shared terminal and Discord Codex session connected.")
         await self._import_codex_history(codex_thread_id)
+        if not str(value.get("name") or "").strip() and preview:
+            asyncio.create_task(
+                self._name_terminal_started_session(
+                    discord_thread,
+                    codex_thread_id,
+                    preview,
+                    cwd,
+                )
+            )
+
+    async def _name_terminal_started_session(
+        self,
+        discord_thread: discord.Thread,
+        codex_thread_id: str,
+        preview: str,
+        workspace: Path,
+    ) -> None:
+        try:
+            with tempfile.TemporaryDirectory(prefix="pam-title-") as temporary:
+                title = await asyncio.to_thread(
+                    self._generate_thread_title,
+                    preview,
+                    workspace,
+                    Path(temporary),
+                )
+            if not title:
+                return
+            await self._app_server.request(
+                "thread/name/set", {"threadId": codex_thread_id, "name": title}
+            )
+            await self._edit_discord_thread_name(discord_thread, title)
+        except Exception:
+            LOG.exception("failed to name terminal-started session %s", codex_thread_id)
 
     async def _ensure_authorized_thread_members(self, discord_thread_id: int) -> None:
         if discord_thread_id in self._membership_synced_threads:
