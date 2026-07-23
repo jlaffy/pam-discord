@@ -8,6 +8,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from pam_discord.bot import (
+    ConnectorApprovalView,
+    ConnectorOAuthView,
+    DISCORD_AGENT_INSTRUCTION,
     PamDiscord,
     _allowed_project_roots,
     _clean_thread_title,
@@ -127,6 +130,50 @@ def test_recent_mirror_content_is_deduplicated_across_different_item_ids() -> No
     assert _recently_mirrored(cache, key, 10) is False
     assert _recently_mirrored(cache, key, 12) is True
     assert _recently_mirrored(cache, key, 30) is False
+
+
+def test_discord_instruction_prefers_existing_tools_without_connector_prompts() -> None:
+    assert "existing authenticated local command-line tools" in DISCORD_AGENT_INSTRUCTION
+    assert "only when" in DISCORD_AGENT_INSTRUCTION
+
+
+def test_connector_approval_defaults_to_decline() -> None:
+    view = ConnectorApprovalView(frozenset({1}))
+    assert view.action == "decline"
+    assert view.allowed_user_ids == frozenset({1})
+
+
+def test_connector_oauth_view_keeps_authorization_url_out_of_message_text() -> None:
+    view = ConnectorOAuthView(frozenset({1}), "https://example.com/oauth")
+    links = [
+        item
+        for item in view.children
+        if isinstance(item, __import__("discord").ui.Button) and item.url
+    ]
+    assert [item.url for item in links] == ["https://example.com/oauth"]
+    assert view.action == "decline"
+
+
+def test_connector_suggestion_is_declined_instead_of_hanging(tmp_path: Path) -> None:
+    bot = _bot(tmp_path)
+    responses: list[tuple[int, dict[str, object]]] = []
+
+    async def respond(request_id: int, result: dict[str, object]) -> None:
+        responses.append((request_id, result))
+
+    bot._app_server.respond = respond  # type: ignore[method-assign]
+    event: dict[str, object] = {
+        "method": "mcpServer/elicitation/request",
+        "id": 7,
+        "params": {
+            "message": "Connect GitHub",
+            "_meta": {"codex_approval_kind": "tool_suggestion"},
+        },
+    }
+
+    asyncio.run(bot._handle_app_server_notification(event))
+
+    assert responses == [(7, {"action": "decline"})]
 
 
 def test_deliverables_are_limited_to_supported_project_files(tmp_path: Path) -> None:

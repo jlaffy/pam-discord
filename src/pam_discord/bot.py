@@ -24,12 +24,85 @@ from .app_server import CodexAppServer, load_shared_sessions, save_shared_sessio
 from .config import ChannelConfig, Config, load_config
 
 LOG = logging.getLogger("pam_discord")
+DISCORD_AGENT_INSTRUCTION = (
+    "You are running through pam's unattended Discord interface. "
+    "Use existing authenticated local command-line tools (for example gh for GitHub) when "
+    "available. Request installation or connection of an app, connector, or plugin only when "
+    "there is no suitable authenticated local tool or the user explicitly asks for that connector."
+)
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
 DELIVERABLE_EXTENSIONS = {
     ".csv", ".docx", ".gif", ".html", ".jpeg", ".jpg", ".md", ".pdf",
     ".png", ".ppt", ".pptx", ".svg", ".tsv", ".txt", ".webp", ".xls",
     ".xlsx", ".zip",
 }
+
+
+class ConnectorApprovalView(discord.ui.View):
+    """Authorized-user-only response controls for a connector suggestion."""
+
+    def __init__(self, allowed_user_ids: frozenset[int], *, timeout: float = 300) -> None:
+        super().__init__(timeout=timeout)
+        self.allowed_user_ids = allowed_user_ids
+        self.action = "decline"
+
+    async def interaction_check(self, interaction: discord.Interaction) -> bool:
+        if interaction.user.id in self.allowed_user_ids:
+            return True
+        await interaction.response.send_message(
+            "Only an authorized pam user can approve this connection.", ephemeral=True
+        )
+        return False
+
+    async def _finish(self, interaction: discord.Interaction, action: str) -> None:
+        self.action = action
+        for child in self.children:
+            if isinstance(child, discord.ui.Button):
+                child.disabled = True
+        label = "approved" if action == "accept" else "declined"
+        await interaction.response.edit_message(
+            content=f"**pam** · Connector setup {label}.", view=self
+        )
+        self.stop()
+
+    @discord.ui.button(label="Connect", style=discord.ButtonStyle.success)
+    async def connect(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
+        await self._finish(interaction, "accept")
+
+    @discord.ui.button(label="Decline", style=discord.ButtonStyle.secondary)
+    async def decline(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
+        await self._finish(interaction, "decline")
+
+
+class ConnectorOAuthView(ConnectorApprovalView):
+    """OAuth link plus completion controls, intended for an authorized user's DM."""
+
+    def __init__(
+        self,
+        allowed_user_ids: frozenset[int],
+        url: str,
+        *,
+        timeout: float = 600,
+    ) -> None:
+        super().__init__(allowed_user_ids, timeout=timeout)
+        self.remove_item(self.connect)
+        self.add_item(
+            discord.ui.Button(
+                label="Open authorization page",
+                style=discord.ButtonStyle.link,
+                url=url,
+            )
+        )
+
+    @discord.ui.button(label="Authorization complete", style=discord.ButtonStyle.success)
+    async def complete(
+        self, interaction: discord.Interaction, _button: discord.ui.Button
+    ) -> None:
+        await self._finish(interaction, "accept")
 
 
 def _safe_name(value: str) -> str:
@@ -527,6 +600,7 @@ class PamDiscord(discord.Client):
             agent_prompt = "\n\n".join(
                 part
                 for part in (
+                    DISCORD_AGENT_INSTRUCTION,
                     channel_config.instruction_prefix,
                     prompt,
                 )
@@ -807,6 +881,69 @@ class PamDiscord(discord.Client):
         method = event.get("method")
         params = event.get("params")
         if not isinstance(params, dict):
+            return
+        if method == "mcpServer/elicitation/request":
+            request_id = event.get("id")
+            metadata = params.get("_meta")
+            if (
+                isinstance(request_id, int)
+                and isinstance(metadata, dict)
+                and metadata.get("codex_approval_kind") == "tool_suggestion"
+            ):
+                codex_thread_id = str(params.get("threadId") or "")
+                discord_thread_id = self._discord_thread_for_codex(codex_thread_id)
+                action = "decline"
+                if discord_thread_id is not None:
+                    discord_thread = self.get_channel(discord_thread_id)
+                    if not isinstance(discord_thread, discord.Thread):
+                        try:
+                            discord_thread = await self.fetch_channel(discord_thread_id)
+                        except discord.HTTPException:
+                            discord_thread = None
+                    if isinstance(discord_thread, discord.Thread):
+                        connector = str(params.get("serverName") or "external connector")
+                        view = ConnectorApprovalView(self.config.allowed_user_ids)
+                        await discord_thread.send(
+                            f"**pam** · Codex wants to connect **{connector}**.\n"
+                            f"{str(params.get('message') or '').strip()}\n\n"
+                            "Pam will use an existing authenticated local tool instead whenever "
+                            "one is available. Connect only if this external connector is needed.",
+                            view=view,
+                        )
+                        timed_out = await view.wait()
+                        action = "decline" if timed_out else view.action
+                LOG.info(
+                    "%s connector request for Discord session: %s",
+                    action,
+                    params.get("message"),
+                )
+                await self._app_server.respond(request_id, {"action": action})
+            elif isinstance(request_id, int) and params.get("mode") == "url":
+                action = "decline"
+                url = str(params.get("url") or "")
+                if url.startswith("https://"):
+                    for user_id in self.config.allowed_user_ids:
+                        try:
+                            user = self.get_user(user_id) or await self.fetch_user(user_id)
+                            view = ConnectorOAuthView(
+                                self.config.allowed_user_ids,
+                                url,
+                            )
+                            await user.send(
+                                f"**pam** · **{str(params.get('serverName') or 'A connector')}** "
+                                "needs authorization. Open the authorization page, complete the "
+                                "provider's sign-in, then return here and press "
+                                "**Authorization complete**.",
+                                view=view,
+                            )
+                            timed_out = await view.wait()
+                            action = "decline" if timed_out else view.action
+                            break
+                        except discord.HTTPException:
+                            LOG.exception(
+                                "could not DM connector authorization to user %s", user_id
+                            )
+                await self._app_server.respond(request_id, {"action": action})
             return
         if method == "thread/started":
             thread_value = params.get("thread")

@@ -97,6 +97,12 @@ class CodexAppServer:
             raise RuntimeError("Codex app-server is not connected")
         await self._socket.send_json({"method": method, "params": params})
 
+    async def respond(self, request_id: int, result: dict[str, object]) -> None:
+        """Answer a request initiated by the app server."""
+        if self._socket is None:
+            raise RuntimeError("Codex app-server is not connected")
+        await self._socket.send_json({"id": request_id, "result": result})
+
     async def _read_loop(self) -> None:
         assert self._socket is not None
         async for message in self._socket:
