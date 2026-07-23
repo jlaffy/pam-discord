@@ -97,10 +97,9 @@ conversation                      = the same linked history viewed through eithe
 We use *conversation* as the general term for what appears as a Codex session in the terminal and a
 Discord thread in Discord.
 
-Start a terminal conversation with `pam codex --yolo`, or use Codex normally inside a connected
-project. pam automatically mirrors active conversations into Discord, using `#general` for the
-project root and creating channels for subdirectories when needed. Use `pam resume` to browse
-conversations that started in either the terminal or Discord.
+Use Codex normally inside a connected project. pam automatically mirrors active conversations into
+Discord, using `#general` for the project root and creating channels for subdirectories when needed.
+Use `pam resume` to browse conversations that started in either the terminal or Discord.
 
 pam stays running after you disconnect. It saves a complete, portable record of your work with
 Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
