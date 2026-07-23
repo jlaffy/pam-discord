@@ -202,6 +202,8 @@ class PamDiscord(discord.Client):
         self._project_setup_task: asyncio.Task[None] | None = None
         self._directory_channel_lock = asyncio.Lock()
         self._pending_discord_renames: dict[int, str] = {}
+        self._linking_codex_threads: set[str] = set()
+        self._last_catalog_sync = 0.0
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -224,6 +226,7 @@ class PamDiscord(discord.Client):
         )
         if not self._session_catalog_synced:
             self._session_catalog_synced = True
+            self._last_catalog_sync = time.monotonic()
             asyncio.create_task(self._sync_project_session_catalogs())
 
     def _channel_config(self, channel: discord.abc.Messageable) -> ChannelConfig | None:
@@ -887,6 +890,9 @@ class PamDiscord(discord.Client):
                 except Exception:
                     LOG.exception("failed to process pam link request %s", path)
             await self._sync_shared_sessions()
+            if time.monotonic() - self._last_catalog_sync >= 10:
+                self._last_catalog_sync = time.monotonic()
+                await self._sync_project_session_catalogs()
             await asyncio.sleep(2)
 
     async def _sync_shared_sessions(self) -> None:
@@ -937,6 +943,16 @@ class PamDiscord(discord.Client):
             cursor = next_cursor
 
     async def _link_started_codex_thread(self, value: dict[str, object]) -> None:
+        codex_thread_id = str(value.get("id") or "")
+        if not codex_thread_id or codex_thread_id in self._linking_codex_threads:
+            return
+        self._linking_codex_threads.add(codex_thread_id)
+        try:
+            await self._link_started_codex_thread_once(value)
+        finally:
+            self._linking_codex_threads.discard(codex_thread_id)
+
+    async def _link_started_codex_thread_once(self, value: dict[str, object]) -> None:
         codex_thread_id = str(value.get("id") or "")
         cwd_value = value.get("cwd")
         if not codex_thread_id or not isinstance(cwd_value, str):
