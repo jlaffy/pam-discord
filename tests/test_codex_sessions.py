@@ -113,6 +113,70 @@ def test_normal_shared_sessions_are_not_polled(tmp_path: Path) -> None:
     assert imported == []
 
 
+def test_discord_started_session_is_relinked_without_duplicate_thread(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "project"
+    records = workspace / ".pam" / "conversations"
+    original_record = records / "123"
+    workspace.mkdir()
+    original_record.mkdir(parents=True)
+    (original_record / "metadata.json").write_text(
+        json.dumps({"discord_thread_id": 123}) + "\n", encoding="utf-8"
+    )
+    channel = ChannelConfig(workspace=workspace, project_record_dir=records)
+    bot = _bot(tmp_path)
+    bot.config.guilds[10] = channel
+
+    class OriginalThread:
+        id = 123
+
+    original = OriginalThread()
+    monkeypatch.setattr("pam_discord.bot.discord.Thread", OriginalThread)
+
+    async def request(method: str, params: dict[str, object]) -> dict[str, object]:
+        assert method == "thread/read"
+        assert params == {"threadId": "codex-thread", "includeTurns": True}
+        return {
+            "thread": {
+                "turns": [
+                    {
+                        "items": [
+                            {"type": "userMessage", "clientId": "discord:123"}
+                        ]
+                    }
+                ]
+            }
+        }
+
+    bot._app_server.request = request  # type: ignore[method-assign]
+    bot.get_channel = lambda channel_id: original if channel_id == 123 else None  # type: ignore[method-assign]
+    authorized: list[int] = []
+
+    async def authorize(thread_id: int) -> None:
+        authorized.append(thread_id)
+
+    bot._ensure_authorized_thread_members = authorize  # type: ignore[method-assign]
+
+    asyncio.run(
+        bot._link_started_codex_thread_once(
+            {
+                "id": "codex-thread",
+                "cwd": str(workspace),
+                "name": "Refined Pam conversations",
+            }
+        )
+    )
+
+    assert json.loads((workspace / ".pam" / "shared-sessions.json").read_text()) == {
+        "codex-thread": 123
+    }
+    assert json.loads((original_record / "metadata.json").read_text())[
+        "codex_thread_id"
+    ] == "codex-thread"
+    assert authorized == [123]
+
+
 def test_live_events_disable_compatibility_polling(tmp_path: Path) -> None:
     workspace = tmp_path / "project"
     workspace.mkdir()

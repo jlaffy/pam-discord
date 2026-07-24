@@ -1,0 +1,9 @@
+Yes—we’re up and running.
+
+- pam service is running
+- Discord connected as `personal-agent`
+- All 4 configured servers are accessible
+- Codex authentication is valid
+- All 24 tests pass
+
+Only issue is a harmless Python 3.13 deprecation warning from Discord’s audio dependency.

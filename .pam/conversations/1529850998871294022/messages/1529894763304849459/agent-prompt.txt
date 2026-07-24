@@ -1,0 +1,5 @@
+Follow this project's instructions.
+
+See recommended optional setup for local developer tools, Codex access, and macOS Dictation.
+
+is it using to write just Kodex access in the last line should it be like full access or something like that?

@@ -1,0 +1,11 @@
+Follow this project's instructions.
+
+7. Use the same conversations in the terminal and Discord
+Start a terminal conversation with:
+
+pam codex --yolo
+You can also use Codex normally inside a connected project. pam automatically discovers active conversations and mirrors them into Discord. Root conversations appear in <#1529850284338057329>; conversations started in subdirectories appear in channels created for those directories.
+
+Run pam resume inside a connected project to browse all its conversations, including ones that started in Discord. Use pam resume rather than codex resume: Codex normally hides non-interactive Discord starts, while pam intentionally presents both origins in one list.
+
+i also wonder whether a condesned version of this block can appear under the Done section rather than as another actino item/step to do

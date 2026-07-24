@@ -1,0 +1,1 @@
+other question I like the idea of configuring like where Pam has access. Could it be more than one path like you just said EWSEJ Laffy could it be other and is this presumably just for like reading and right just for like writing writing, but in terms of like reading and copying and stuff that would be like machine wide or how are we doing it currently

@@ -1,0 +1,3 @@
+Follow this project's instructions.
+
+ok great so this - If we want a clean final push today, I’d implement pam project create and the folder instructions, then leave statistics, Hub, and icons for later - sounds good.

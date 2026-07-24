@@ -41,7 +41,9 @@ pam saves the complete conversation: typed messages, original audio, visible tra
 agent prompts, replies, events, session IDs, authors, timestamps, and whether each item came from
 Discord or a terminal. Records live under `<project>/.pam/conversations/`.
 
-Setup asks whether `.pam/` should be ignored by Git or available to commit. Ignoring is the default;
+Setup asks whether Pam conversation records should be ignored by Git or available to commit.
+“Track Pam history” includes only `.pam/conversations/` text and metadata. Operational session
+registries, audio, and temporary files stay ignored and local. Ignoring all history is the default;
 pam never uploads conversation history automatically.
 
 ## Direct Codex sessions

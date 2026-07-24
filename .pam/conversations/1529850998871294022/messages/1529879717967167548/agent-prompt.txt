@@ -1,0 +1,10 @@
+Follow this project's instructions.
+
+Add projects remotely and simply — implemented locally
+
+pam project add PATH from Discord is built.
+PAM supplies the two necessary Discord links and completes configuration.
+Still needs final integration testing, publishing, and activation.
+
+shall we complete this one next then? 
+we can run a test by adding pam-vignettes as a server from here (desktop discord)

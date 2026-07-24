@@ -1,0 +1,9 @@
+Updated Pam’s Git behavior:
+
+- “Track Pam history” now exposes only `.pam/conversations/` text and metadata.
+- Session registries, audio, temporary files, and operational attachment/import state remain ignored.
+- Existing tracked operational files are removed from Git’s index without deleting local copies.
+- Updated CLI help, documentation, tests, and this repository’s `.gitignore`.
+- Pam currently does not push automatically, so no pull/rebase workflow required changes.
+
+Validation: 39 tests passed. Conversation records now appear as untracked and ready to add; operational files remain ignored.

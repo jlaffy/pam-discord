@@ -1,0 +1,8 @@
+Unified conversation visibility
+Implemented locally:
+pam resume includes conversations started in Discord.
+pam discovers project conversations and creates missing Discord threads.
+New conversations wait until their first message before being mirrored.
+Tests pass; not yet published or activated.
+
+ so this is like fully integrated right fully integrated between discord and the terminal for a particular project for a particular project set of coded sessions like the resume flag shows you everything just like the threads in the discord server show you everything and the names are gonna be the same like the code names and the discord thread names is that right?

@@ -1,0 +1,7 @@
+Follow this project's instructions.
+
+pam turns Discord into a remote interface for Codex on your own computer. Connect a project directory once, then start or continue conversations by text or voice, in the terminal or in Discord: **project directories** become **Discord servers**, **subdirectories** become **channels** (where relevant), and **Codex sessions** become **threads**.
+
+lets just condense to this first para in the readme
+
+and then we should have a separate main point that is about pam keeping history of prompts and ocnversations

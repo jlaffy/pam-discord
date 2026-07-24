@@ -1,0 +1,3 @@
+pam automatically mirrors your project's active Codex conversations into Discord: project directories become servers, subdirectories become channels when needed, and Codex sessions become threads. Start anywhere and continue anywhere.
+
+ and the other way around too right? it adds them to the Terminal and mirrors whatever is created on Discorrd

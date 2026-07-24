@@ -1,0 +1,1 @@
+pam also keeps a complete, portable history of your prompts and conversations on your computer, in human-readable Markdown and machine-readable JSONL. - edit to that

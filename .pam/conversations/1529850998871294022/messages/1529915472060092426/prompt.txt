@@ -1,0 +1,5 @@
+remote access → reach your remote computer and Codex through Discord
+fast voice    → transcribe voice notes using the fastest reliable CPU or GPU mode detected
+file delivery → receive generated plots, presentations, documents, and tables in Discord
+
+i liked better when at the top we had those two main points that are the two main paras reiterated too. so those 5 points total. like key features of pam-discord. and for the file - its not just delivery, its also easy to view (cos its discord, not the terminal). receive and view maybe?

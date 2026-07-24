@@ -268,7 +268,69 @@ def test_setup_can_make_conversation_history_trackable(
         ]
     )
 
-    assert ignore.read_text() == "data/\n"
+    assert ignore.read_text() == (
+        "data/\n\n"
+        "# pam conversation history\n"
+        ".pam/*\n"
+        "!.pam/conversations/\n"
+        ".pam/conversations/**/*\n"
+        "!.pam/conversations/**/\n"
+        "!.pam/conversations/**/*.md\n"
+        "!.pam/conversations/**/*.txt\n"
+        "!.pam/conversations/**/*.json\n"
+        "!.pam/conversations/**/*.jsonl\n"
+        ".pam/conversations/**/imported-items.json\n"
+        ".pam/conversations/**/sent-attachments.json\n"
+        "# end pam conversation history\n"
+    )
+
+
+def test_track_history_untracks_operational_and_audio_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    subprocess.run(["git", "init", "-q"], cwd=workspace, check=True)
+    conversation = workspace / ".pam" / "conversations" / "123" / "messages" / "456"
+    conversation.mkdir(parents=True)
+    (workspace / ".pam" / "shared-sessions.json").write_text("{}\n")
+    (workspace / ".pam" / "polled-sessions.json").write_text("[]\n")
+    (conversation / "metadata.json").write_text("{}\n")
+    (conversation / "prompt.txt").write_text("hello\n")
+    (conversation / "voice.ogg").write_bytes(b"audio")
+    (conversation / "working.tmp").write_text("temporary\n")
+    (conversation / "sent-attachments.json").write_text("[]\n")
+    subprocess.run(["git", "add", "-f", ".pam"], cwd=workspace, check=True)
+    monkeypatch.setattr("pam_discord.setup.getpass.getpass", lambda _: "private-token")
+    monkeypatch.setattr(
+        "pam_discord.setup._prepare_discord_workspace",
+        lambda *_args, **_kwargs: (222, 333, "https://discord.com/channels/333/222"),
+    )
+
+    setup(
+        [
+            str(workspace),
+            "--state-dir",
+            str(tmp_path / "pam-state"),
+            "--user-id",
+            "111",
+            "--track-history",
+            "--no-service",
+        ]
+    )
+
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=workspace, check=True, capture_output=True, text=True
+    ).stdout.splitlines()
+    assert ".pam/conversations/123/messages/456/metadata.json" in tracked
+    assert ".pam/conversations/123/messages/456/prompt.txt" in tracked
+    assert ".pam/shared-sessions.json" not in tracked
+    assert ".pam/polled-sessions.json" not in tracked
+    assert ".pam/conversations/123/messages/456/voice.ogg" not in tracked
+    assert ".pam/conversations/123/messages/456/working.tmp" not in tracked
+    assert ".pam/conversations/123/messages/456/sent-attachments.json" not in tracked
+    assert (conversation / "voice.ogg").exists()
+    assert (conversation / "working.tmp").exists()
 
 
 def test_identity_setup_once_then_add_multiple_projects(

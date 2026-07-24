@@ -7,4 +7,15 @@ __pycache__/
 archive/
 *.log
 
-.pam/
+# pam conversation history
+.pam/*
+!.pam/conversations/
+.pam/conversations/**/*
+!.pam/conversations/**/
+!.pam/conversations/**/*.md
+!.pam/conversations/**/*.txt
+!.pam/conversations/**/*.json
+!.pam/conversations/**/*.jsonl
+.pam/conversations/**/imported-items.json
+.pam/conversations/**/sent-attachments.json
+# end pam conversation history

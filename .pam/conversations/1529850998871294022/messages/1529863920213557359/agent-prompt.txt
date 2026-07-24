@@ -1,0 +1,8 @@
+Follow this project's instructions.
+
+You can enable it at pam-discord Settings: under Features, check Discussions. Then we can add a quiet README link such as:
+
+Questions, feedback, or ideas? Join the pam discussions.
+ 
+
+yes perfect

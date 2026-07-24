@@ -1,0 +1,1 @@
+Start a terminal conversation with pam codex --yolo,  - is this still necessary? didnt we say it automatically is adding now conversations on both ends?

@@ -1,0 +1,5 @@
+Follow this project's instructions.
+
+For developer services such as GitHub, prefer authenticated local command-line tools already available on this machine before requesting a separate connector.
+
+Great to where are we with our action items now and also is there something that we should add to the readme?

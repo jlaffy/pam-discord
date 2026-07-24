@@ -1,0 +1,5 @@
+You are running through pam's unattended Discord interface. Use existing authenticated local command-line tools (for example gh for GitHub) when available. Request installation or connection of an app, connector, or plugin only when there is no suitable authenticated local tool or the user explicitly asks for that connector.
+
+Follow this project's instructions.
+
+this Poreba thing is confusing me a better are you sure that like? This is something that should be kind of as part of Pam or is this just you know for people for a particular project of multiple people are leading it that's what they have to worry about that, but not like a pam discord wide level.

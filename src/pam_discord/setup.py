@@ -265,24 +265,77 @@ def _setup_identity(args: argparse.Namespace) -> None:
 
 def _configure_project_archive_git(workspace: Path, *, ignore: bool) -> None:
     path = workspace / ".gitignore"
-    marker = ".pam/"
-    if not ignore:
-        if not path.exists():
-            return
-        lines = path.read_text(encoding="utf-8").splitlines()
-        filtered = [line for line in lines if line.strip() != marker]
-        if filtered != lines:
-            content = "\n".join(filtered)
-            path.write_text(f"{content}\n" if content else "", encoding="utf-8")
+    legacy_marker = ".pam/"
+    managed_header = "# pam conversation history"
+    managed_end = "# end pam conversation history"
+    track_rules = [
+        managed_header,
+        ".pam/*",
+        "!.pam/conversations/",
+        ".pam/conversations/**/*",
+        "!.pam/conversations/**/",
+        "!.pam/conversations/**/*.md",
+        "!.pam/conversations/**/*.txt",
+        "!.pam/conversations/**/*.json",
+        "!.pam/conversations/**/*.jsonl",
+        ".pam/conversations/**/imported-items.json",
+        ".pam/conversations/**/sent-attachments.json",
+        managed_end,
+    ]
+    rules = [legacy_marker] if ignore else track_rules
+
+    lines = path.read_text(encoding="utf-8").splitlines() if path.exists() else []
+    filtered: list[str] = []
+    in_managed_block = False
+    for line in lines:
+        stripped = line.strip()
+        if stripped == managed_header:
+            in_managed_block = True
+            continue
+        if in_managed_block:
+            if stripped == managed_end:
+                in_managed_block = False
+            continue
+        if stripped == legacy_marker:
+            continue
+        filtered.append(line)
+
+    while filtered and not filtered[-1]:
+        filtered.pop()
+    if filtered and not ignore:
+        filtered.append("")
+    filtered.extend(rules)
+    path.write_text("\n".join(filtered) + "\n", encoding="utf-8")
+    _untrack_ignored_pam_files(workspace)
+
+
+def _untrack_ignored_pam_files(workspace: Path) -> None:
+    """Remove ignored Pam artifacts from Git's index while preserving local copies."""
+    repository = subprocess.run(
+        ["git", "rev-parse", "--is-inside-work-tree"],
+        cwd=workspace,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if repository.returncode != 0 or repository.stdout.strip() != "true":
         return
-    if path.exists():
-        content = path.read_text(encoding="utf-8")
-        if any(line.strip() == marker for line in content.splitlines()):
-            return
-        separator = "" if not content or content.endswith("\n") else "\n"
-        path.write_text(f"{content}{separator}{marker}\n", encoding="utf-8")
-    else:
-        path.write_text(f"{marker}\n", encoding="utf-8")
+    ignored = subprocess.run(
+        ["git", "ls-files", "-ci", "--exclude-standard", "-z", "--", ".pam"],
+        cwd=workspace,
+        capture_output=True,
+        check=False,
+    )
+    if ignored.returncode != 0 or not ignored.stdout:
+        return
+    tracked_paths = [value for value in ignored.stdout.decode().split("\0") if value]
+    if tracked_paths:
+        subprocess.run(
+            ["git", "rm", "--cached", "--ignore-unmatch", "--", *tracked_paths],
+            cwd=workspace,
+            capture_output=True,
+            check=True,
+        )
 
 
 def setup(argv: list[str] | None = None) -> None:
@@ -302,10 +355,12 @@ def setup(argv: list[str] | None = None) -> None:
     )
     history = parser.add_mutually_exclusive_group()
     history.add_argument(
-        "--ignore-history", action="store_true", help="Add .pam conversation history to .gitignore"
+        "--ignore-history", action="store_true", help="Keep Pam conversation records out of Git"
     )
     history.add_argument(
-        "--track-history", action="store_true", help="Allow .pam conversation history in Git"
+        "--track-history",
+        action="store_true",
+        help="Allow only Pam conversation text and metadata in Git",
     )
     args = parser.parse_args(argv)
 

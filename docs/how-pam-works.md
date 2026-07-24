@@ -101,8 +101,10 @@ Discord-to-Codex session mappings:
 /path/to/my-project/.pam/
 ```
 
-During setup, you choose whether Git ignores this directory or allows its conversation history to
-be committed.
+During setup, you choose whether Git ignores Pam history or allows only
+`.pam/conversations/` text and metadata to be committed. Session registries, audio, and temporary
+files stay local; setup untracks any such files already in an existing repository without deleting
+the local copies.
 
 ## Central pam versus project-specific pam data
 

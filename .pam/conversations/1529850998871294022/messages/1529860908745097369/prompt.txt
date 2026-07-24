@@ -1,0 +1,3 @@
+is this  sentence necessary:
+pam prints a Discord link to <#1529850284338057329>. Open it and send your first message.
+or will that be obvious when the user is actually setting up that they should open it

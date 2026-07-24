@@ -1,0 +1,3 @@
+To keep project servers together in Discord, drag one PAM server onto another, name the resulting folder pam, and choose a folder color.
+
+ i think we can delete this line

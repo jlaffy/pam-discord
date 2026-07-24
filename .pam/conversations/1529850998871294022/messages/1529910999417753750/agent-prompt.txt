@@ -1,0 +1,4 @@
+Follow this project's instructions.
+
+Drag the new pam server icon onto any PAM project-server icon.
+ what?

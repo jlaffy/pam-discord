@@ -1,0 +1,2 @@
+“Where may PAM add or create projects?” with a suggested directory.
+ is add the right language or is it like it is add the right language I understand that it's adding Pam but it kind of sounds like adding a project which doesn't sound too different to creating a directory

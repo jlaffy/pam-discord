@@ -1,0 +1,15 @@
+Follow this project's instructions.
+
+4. Finish pam setup
+pam setup
+Paste the Discord user ID and bot token from Steps 2–3.
+
+5. Create your general pam server
+Run:
+
+pam hub create
+When asked where pam may connect or create project directories, choose the directory containing your projects. pam suggests the parent of the cloned pam-discord repository.
+
+Follow the two links to create a Discord server named pam and add the bot. This is your general server for conversations that do not belong to a project and for managing project servers.
+
+i kind of think 5 should be part of 4, or not explicit as another step - the point is its automatic this one. also the hub language that appears once then disappears is conrfusing esoecially since it in the pipings is just another server location.

@@ -1,0 +1,5 @@
+Follow this project's instructions.
+
+For developer services such as GitHub, prefer authenticated local command-line tools already available on this machine before requesting a separate connector.
+
+so for projects that already had codex sessions, and for which we already have a server on discord, should we have channels and threads appearing as sub directories and their Kodex sessions, respectively, e.g. for signal diversity. I'm sure there were many Kodak sessions that already existed and are able to be resumed that live in different subdirectories.

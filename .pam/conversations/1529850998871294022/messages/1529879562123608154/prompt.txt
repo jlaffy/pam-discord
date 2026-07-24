@@ -1,0 +1,6 @@
+Voice prompts on desktop — done and published
+
+macOS Dictation guide exists.
+README links to it quietly as an optional feature.
+
+ great lets remove this one from the list then

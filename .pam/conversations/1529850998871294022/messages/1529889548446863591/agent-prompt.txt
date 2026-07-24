@@ -1,0 +1,5 @@
+Follow this project's instructions.
+
+For developer services such as GitHub, prefer authenticated local command-line tools already available on this machine before requesting a separate connector.
+
+how is it that they appear automatically within 10 seconds?

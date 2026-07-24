@@ -1,0 +1,16 @@
+## Terminal · 2026-07-24T18:05:17.023529+00:00
+
+You are running through pam's unattended Discord interface. Use existing authenticated local command-line tools (for example gh for GitHub) when available. Request installation or connection of an app, connector, or plugin only when there is no suitable authenticated local tool or the user explicitly asks for that connector.
+
+Follow this project's instructions.
+
+Update Pam’s Git behavior:
+>
+Commit .pam/conversations/ text and metadata.
+Do not commit shared-sessions.json, polled-sessions.json, audio, or temporary files.
+Keep those operational files locally using .gitignore.
+For existing projects, untrack them without deleting local copies.
+If Pam pushes automatically, pull/rebase first.
+>
+“Track Pam history” should mean conversation records only.
+

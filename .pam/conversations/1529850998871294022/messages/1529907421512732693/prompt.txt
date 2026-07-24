@@ -1,0 +1,2 @@
+ok.  but i dont like this phrasing: Where do you keep your projects?
+ its kind of ambiguous. it was better before when its clear e are giving permissions to connect/create dirs within there

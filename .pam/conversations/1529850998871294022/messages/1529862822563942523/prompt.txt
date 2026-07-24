@@ -1,0 +1,4 @@
+Optional: dictate on a Mac
+Voice messages work in Discord's mobile app; to dictate text in Discord or any other Mac app, see Set up macOS Dictation.
+
+ try a couple other phrasings that make it clear this isnt like yet another thing that needs to be set up, its just hey, given that dictation doesnt work by default on mac, if you want that too see here

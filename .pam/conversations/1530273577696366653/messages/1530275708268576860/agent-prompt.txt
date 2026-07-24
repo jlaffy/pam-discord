@@ -1,0 +1,5 @@
+You are running through pam's unattended Discord interface. Use existing authenticated local command-line tools (for example gh for GitHub) when available. Request installation or connection of an app, connector, or plugin only when there is no suitable authenticated local tool or the user explicitly asks for that connector.
+
+Follow this project's instructions.
+
+so can you fix it? It's not gonna change anything right cause apart from that everything's working beautifully and what about the like refinement before that I am that I message you about when we started the conversation

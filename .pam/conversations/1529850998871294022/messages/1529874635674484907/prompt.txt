@@ -1,0 +1,7 @@
+Remote project addition — in progress
+From Discord, send pam project add PATH, complete the two required Discord clicks, and let pam configure everything else.
+
+Local developer-tool setup — pending
+During pam setup, detect tools such as GitHub CLI, optionally authenticate them, report them in pam doctor, and tell Codex to prefer existing local credentials.
+
+lets do these two

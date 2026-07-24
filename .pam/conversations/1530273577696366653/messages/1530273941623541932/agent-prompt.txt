@@ -1,0 +1,5 @@
+You are running through pam's unattended Discord interface. Use existing authenticated local command-line tools (for example gh for GitHub) when available. Request installation or connection of an app, connector, or plugin only when there is no suitable authenticated local tool or the user explicitly asks for that connector.
+
+Follow this project's instructions.
+
+can you also explain to me why am now it just created another thread called refined Pam conversations that is basically the duplicate of this but without Pam responding like it's kinda like duplicate conversations with different thread names is there an issue with naming it's good if it's kind of if it's good if it's just like, how do you know automatically yeah but that seems kind of buggy that there's like somewhat duplicate conversations with different name like titles and Pam only responding in one, but that just shouldn't be like a duplicate conversation I mean a duplicate thread made to begin with

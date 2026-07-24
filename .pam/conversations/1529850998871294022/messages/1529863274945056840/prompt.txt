@@ -1,0 +1,3 @@
+If you also want to speak prompts on your Mac, you can optionally enable macOS Dictation.
+
+ and lets put it at the end of the read me then. or nearer the end

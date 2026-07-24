@@ -1,0 +1,1 @@
+How about : If you also want to speak prompts on your Mac, you can optionally enable [macOS Dictation](docs/macos-dictation.md).

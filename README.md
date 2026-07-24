@@ -78,8 +78,10 @@ pam project create /path/to/new-project
 ```
 
 Follow the two links; pam detects the new project server and finishes configuration automatically.
-When connecting an existing project, choose whether `.pam/` conversation history is ignored by Git
-or can be committed.
+When connecting a project, choose whether Git ignores Pam history or allows
+`.pam/conversations/` text and metadata to be committed. Pam always keeps operational session
+registries, audio, and temporary files local. In existing repositories, setup untracks those
+operational files without deleting the local copies.
 
 ## Done
 
@@ -100,7 +102,8 @@ Use `pam resume` to browse conversations that started in either the terminal or 
 pam stays running after you disconnect. It saves a complete, portable record of your work with
 Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
 prompts, responses, voice transcripts, and agent events. Project history lives in
-`<project>/.pam/conversations/`; during setup, you choose whether Git ignores or tracks it.
+`<project>/.pam/conversations/`; during setup, “track Pam history” means tracking only conversation
+text and metadata.
 
 pam runs Discord-started Codex work with full local access by default, equivalent to
 `codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user

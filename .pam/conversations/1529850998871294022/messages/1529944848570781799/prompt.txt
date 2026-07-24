@@ -1,0 +1,1 @@
+can you check that when we are recording/saving the conversations that even though we don't see the execution trace in discord it's actually saved and they like saved .pan files

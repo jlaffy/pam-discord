@@ -1,0 +1,9 @@
+Update Pam’s Git behavior:
+>
+Commit .pam/conversations/ text and metadata.
+Do not commit shared-sessions.json, polled-sessions.json, audio, or temporary files.
+Keep those operational files locally using .gitignore.
+For existing projects, untrack them without deleting local copies.
+If Pam pushes automatically, pull/rebase first.
+>
+“Track Pam history” should mean conversation records only.

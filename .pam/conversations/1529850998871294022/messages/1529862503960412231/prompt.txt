@@ -1,0 +1,6 @@
+Optional: dictate prompts on a Mac
+This is separate from the pam installation. macOS Dictation can turn speech into text directly in Discord's message box, after which you review and send the prompt normally.
+
+See Set up macOS Dictation for pam.
+
+ can you just simplify this to the last sentence or something that they can click on . should be clear that voice automatically works on phone, but on desktop app you can add or even simpler this is just an extra help that our repo is giving to get dictation working on macOS comptuers in general right? its not specific to discord and will be more broadly useful for the user that wants to dictate from their desktop apps?

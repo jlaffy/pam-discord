@@ -1,0 +1,3 @@
+All project tests pass: **34 passed** in 4.44 seconds.
+
+One dependency warning: Discord’s audio player imports Python’s deprecated `audioop` module, scheduled for removal in Python 3.13. No project files were changed.

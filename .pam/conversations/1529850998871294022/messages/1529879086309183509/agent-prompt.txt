@@ -1,0 +1,4 @@
+Follow this project's instructions.
+
+For Discord-started conversations, use pam resume, not raw codex resume; raw Codex normally hides non-interactive starts. pam resume intentionally includes both origins.
+yes make a note of this somewhere for our vignette and also should be on the git repo somewhere . like its not part of installation but explains why we want to look at pam resume rather than codex resume . also if we are doing pam codex --yolo then should we do pam codex resume? or i dunno

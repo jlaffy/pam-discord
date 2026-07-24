@@ -1144,6 +1144,22 @@ class PamDiscord(discord.Client):
         if codex_thread_id in sessions:
             await self._ensure_authorized_thread_members(sessions[codex_thread_id])
             return
+        originating_thread = await self._originating_discord_thread(codex_thread_id)
+        if originating_thread is not None:
+            sessions[codex_thread_id] = originating_thread.id
+            save_shared_sessions(channel_config.workspace, sessions)
+            if channel_config.project_record_dir is not None:
+                metadata_path = (
+                    channel_config.project_record_dir
+                    / str(originating_thread.id)
+                    / "metadata.json"
+                )
+                if metadata_path.exists():
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    metadata["codex_thread_id"] = codex_thread_id
+                    _write_json(metadata_path, metadata)
+            await self._ensure_authorized_thread_members(originating_thread.id)
+            return
         parent = await self._conversation_parent_channel(channel_config, cwd)
         if not isinstance(parent, discord.TextChannel):
             LOG.warning("no default Discord channel for Codex thread %s", codex_thread_id)
@@ -1187,6 +1203,42 @@ class PamDiscord(discord.Client):
                     cwd,
                 )
             )
+
+    async def _originating_discord_thread(
+        self, codex_thread_id: str
+    ) -> discord.Thread | None:
+        """Recover the Discord thread that started a not-yet-mapped Codex session."""
+        try:
+            result = await self._app_server.request(
+                "thread/read", {"threadId": codex_thread_id, "includeTurns": True}
+            )
+        except Exception:
+            LOG.exception("failed to inspect Codex session %s before linking", codex_thread_id)
+            raise
+        thread = result.get("thread") if isinstance(result, dict) else None
+        turns = thread.get("turns", []) if isinstance(thread, dict) else []
+        for turn in turns:
+            if not isinstance(turn, dict):
+                continue
+            for item in turn.get("items", []):
+                if not isinstance(item, dict) or item.get("type") != "userMessage":
+                    continue
+                client_id = str(item.get("clientId") or "")
+                if not client_id.startswith("discord:"):
+                    continue
+                try:
+                    discord_id = int(client_id.removeprefix("discord:"))
+                except ValueError:
+                    continue
+                candidate = self.get_channel(discord_id)
+                if not isinstance(candidate, discord.Thread):
+                    try:
+                        candidate = await self.fetch_channel(discord_id)
+                    except (discord.HTTPException, discord.InvalidData):
+                        continue
+                if isinstance(candidate, discord.Thread):
+                    return candidate
+        return None
 
     async def _name_terminal_started_session(
         self,

@@ -1,0 +1,3 @@
+Where do your projects normally live?
+Suggested: /ewsc/jlaffy
+ it seems kind of imprecise like is it the case that you could only create things within like you know Pam serve within child directories in this case of EAWSEJ Laffy and are you saying that this would be in the like local/Palm discord also, is that the right place for it in my particular use case or is like it should be in the in a location that is shared between the ESC machines. You can see where my other config files are like my condo environments and stuff. I think it's like/like home UNIX or something. Maybe that's better thoughts?

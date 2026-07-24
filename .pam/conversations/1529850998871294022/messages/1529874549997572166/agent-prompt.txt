@@ -1,0 +1,7 @@
+Follow this project's instructions.
+
+Understood: there is one underlying conversation.
+
+In the terminal, it appears as a Codex session.
+In Discord, it appears as a Discord thread.
+They are two interfaces to the same conversation. Could be nice to just like make that definition all those definitions explicit on on on I'll get her like on the read me don't make a big deal out of it but like yeah or maybe in like a definition to MD or something for now or just like a little stud message, but I guess there's some terminology that would be good to like define so that's what we mean by convers that should probably be another one down the line for like project directory and discord other you know so there's discord with discord threads and then there's project directories with Kodak sessions and like those two sets of things I'd like the equivalent of each other

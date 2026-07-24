@@ -1,0 +1,2 @@
+Conversation naming and mirroring — code complete; all 31 tests pass. Needs final safety review, publishing, and activation.
+ so whats missing here

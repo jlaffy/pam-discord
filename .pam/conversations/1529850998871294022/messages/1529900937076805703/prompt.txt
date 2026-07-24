@@ -1,0 +1,9 @@
+Bookmarked for later:
+
+Thread statistics/status message.
+Default general pam Hub.
+Coordinated project-server icons.
+Instructions for grouping PAM servers into a Discord folder.
+
+should we jsut finish if these are straightforward to do
+or actually, one more thing is that we should also be able to create a discord server for a new project directory even if it doesnt exist yet. yes?

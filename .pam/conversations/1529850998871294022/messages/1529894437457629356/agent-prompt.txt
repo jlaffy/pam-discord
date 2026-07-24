@@ -1,0 +1,6 @@
+Follow this project's instructions.
+
+Project directory ↔ Discord server
+Project subdirectory ↔ Discord channel
+Codex session in a given subdirectory ↔ Discord thread in corresponding channel
+note: we  refer to codex sessions and discord threads more generally as "conversations", ie the same linked history viewed through either interface

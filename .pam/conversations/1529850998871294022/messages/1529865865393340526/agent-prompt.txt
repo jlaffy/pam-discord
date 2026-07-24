@@ -1,0 +1,9 @@
+Follow this project's instructions.
+
+pam means personal-agent-manager.
+
+ this can be in the title of the readme instead like pam (personal-agent-manager) or something. and then can u make this : pam is a self-hosted bridge that runs on the same remote computer as your projects and Codex, turning each Discord server into a remote interface for one project directory.
+
+ into a compressed version for the About section. or just like this point on being an interface for remote computer with projects and Codex sessions 
+
+and you had written a line about ike seeing the 'full history of codex sessions' started on terminal or dicscord on both. that should be near top of the readme somewhere as its also pretty useful

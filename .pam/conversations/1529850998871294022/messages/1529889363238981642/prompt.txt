@@ -1,0 +1,1 @@
+are you saying that in the past we were like actively linking Kodex sessions to Pam but now all we have to do is like add a project directory to Japan like we do at the beginning to make this server and then it will automatically scan for existing code sessions within that project directory and create that structure of channels and threads in the discord seven?

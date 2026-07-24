@@ -1,0 +1,6 @@
+Follow this project's instructions.
+
+6. Use terminal and Discord shared sessions
+Start a new linked conversation    Link one already in progress
+pam codex    Ask Codex: Link this conversation to pam
+ can u add --yolo flag so people know that works like pam codex --yolo

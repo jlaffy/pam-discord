@@ -1,0 +1,3 @@
+Follow this project's instructions.
+
+To change the repository setting, I need GitHub access connected here. pam should always have permissions when we set up by dfault. is that not the casE??
