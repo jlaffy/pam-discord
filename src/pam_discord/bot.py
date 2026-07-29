@@ -661,64 +661,66 @@ class PamDiscord(discord.Client):
                 return
 
             if channel_config.run_codex:
-                output, session_id = await asyncio.to_thread(
-                    self._run_codex,
+                await self._start_discord_codex_session(
+                    channel_config,
+                    thread,
+                    message.id,
                     agent_prompt,
-                    channel_config.workspace,
                     conversation_dir,
-                    record_dir,
+                    project_record[0] if project_record is not None else None,
                 )
-                (record_dir / "codex-output.txt").write_text(output + "\n", encoding="utf-8")
-                sessions = load_shared_sessions(channel_config.workspace)
-                sessions[session_id] = thread.id
-                save_shared_sessions(channel_config.workspace, sessions)
-                if project_record is not None:
-                    metadata_path = project_record[0] / "metadata.json"
-                    project_metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
-                    project_metadata["codex_thread_id"] = session_id
-                    _write_json(metadata_path, project_metadata)
-                _append_jsonl(
-                    conversation_dir / "conversation.jsonl",
-                    {
-                        "role": "agent",
-                        "agent": "codex",
-                        "session_id": session_id,
-                        "created_at": datetime.now(UTC).isoformat(),
-                        "in_reply_to": message.id,
-                        "output": output,
-                    },
-                )
-                await self._send_chunks(thread, f"**Codex**\n{output}")
-                await self._send_deliverables(
-                    thread,
-                    output,
-                    channel_config.workspace,
-                    project_record[0] if project_record is not None else conversation_dir,
-                )
-                await self._name_discord_started_session(
-                    thread,
-                    session_id,
-                    prompt,
-                    channel_config.workspace,
-                    record_dir,
-                )
-                if project_record is not None:
-                    project_conversation_dir, project_message_dir = project_record
-                    shutil.copytree(record_dir, project_message_dir, dirs_exist_ok=True)
-                    agent_record = {
-                        "role": "agent",
-                        "agent": "codex",
-                        "session_id": session_id,
-                        "created_at": datetime.now(UTC).isoformat(),
-                        "in_reply_to": message.id,
-                        "output": output,
-                    }
-                    _append_jsonl(project_conversation_dir / "conversation.jsonl", agent_record)
-                    _append_markdown(
-                        project_conversation_dir / "conversation.md",
-                        f"Codex · {agent_record['created_at']}",
-                        output,
-                    )
+
+    async def _start_discord_codex_session(
+        self,
+        channel_config: ChannelConfig,
+        discord_thread: discord.Thread,
+        discord_message_id: int,
+        agent_prompt: str,
+        conversation_dir: Path,
+        project_conversation_dir: Path | None,
+    ) -> str:
+        result = await self._app_server.request(
+            "thread/start",
+            {
+                "cwd": str(channel_config.workspace),
+                "approvalPolicy": "never",
+                "serviceName": "pam_discord",
+            },
+        )
+        value = result.get("thread") if isinstance(result, dict) else None
+        codex_thread_id = str(value.get("id") or "") if isinstance(value, dict) else ""
+        if not codex_thread_id:
+            raise RuntimeError("Codex app-server started a conversation without an ID")
+
+        # Save the relationship before starting work. Notifications and the session
+        # catalog can now recognize that this conversation already has a Discord thread.
+        sessions = load_shared_sessions(channel_config.workspace)
+        sessions[codex_thread_id] = discord_thread.id
+        save_shared_sessions(channel_config.workspace, sessions)
+        _write_json(
+            conversation_dir / "state.json",
+            {
+                "codex_session_id": codex_thread_id,
+                "workspace": str(channel_config.workspace),
+            },
+        )
+        if project_conversation_dir is not None:
+            metadata_path = project_conversation_dir / "metadata.json"
+            if metadata_path.exists():
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["codex_thread_id"] = codex_thread_id
+                _write_json(metadata_path, metadata)
+
+        turn_params: dict[str, object] = {
+            "threadId": codex_thread_id,
+            "input": [{"type": "text", "text": agent_prompt}],
+            "clientUserMessageId": f"discord:{discord_message_id}",
+            "approvalPolicy": "never",
+        }
+        if self.config.codex_full_access:
+            turn_params["sandboxPolicy"] = {"type": "dangerFullAccess"}
+        await self._app_server.request("turn/start", turn_params)
+        return codex_thread_id
 
     async def _name_discord_started_session(
         self,
@@ -1476,81 +1478,6 @@ class PamDiscord(discord.Client):
             raise ValueError("decoded audio exceeds configured duration limit")
         transcript = " ".join(segment.text.strip() for segment in segments).strip()
         return transcript or "[No speech detected]"
-
-    def _run_codex(
-        self,
-        prompt: str,
-        workspace: Path,
-        conversation_dir: Path,
-        record_dir: Path,
-    ) -> tuple[str, str]:
-        state_path = conversation_dir / "state.json"
-        session_id: str | None = None
-        if state_path.exists():
-            session_id = json.loads(state_path.read_text(encoding="utf-8")).get("codex_session_id")
-
-        final_path = record_dir / "codex-final.txt"
-        if session_id:
-            command = [
-                self.config.codex_binary,
-                "exec",
-                *(
-                    ["--dangerously-bypass-approvals-and-sandbox"]
-                    if self.config.codex_full_access
-                    else []
-                ),
-                "resume",
-                "--json",
-                "-o",
-                str(final_path),
-                session_id,
-                prompt,
-            ]
-        else:
-            command = [
-                self.config.codex_binary,
-                "exec",
-                *(
-                    ["--dangerously-bypass-approvals-and-sandbox"]
-                    if self.config.codex_full_access
-                    else []
-                ),
-                "--json",
-                "-C",
-                str(workspace),
-                "-o",
-                str(final_path),
-                "--",
-                prompt,
-            ]
-
-        result = subprocess.run(
-            command,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=self.config.codex_timeout_seconds,
-            check=False,
-            env={key: value for key, value in os.environ.items() if key != "OPENAI_API_KEY"},
-        )
-        (record_dir / "codex-events.jsonl").write_text(result.stdout, encoding="utf-8")
-        if result.returncode != 0:
-            detail = result.stderr.strip()[-2000:]
-            raise RuntimeError(f"codex exited {result.returncode}: {detail}")
-
-        for line in result.stdout.splitlines():
-            try:
-                event = json.loads(line)
-            except json.JSONDecodeError:
-                continue
-            if event.get("type") == "thread.started" and event.get("thread_id"):
-                session_id = str(event["thread_id"])
-        if not session_id:
-            raise RuntimeError("Codex completed without returning a resumable session ID")
-
-        _write_json(state_path, {"codex_session_id": session_id, "workspace": str(workspace)})
-        output = final_path.read_text(encoding="utf-8").strip() if final_path.exists() else ""
-        return output or "[Codex completed without text output]", session_id
 
     @staticmethod
     async def _send_chunks(channel: discord.abc.Messageable, text: str) -> None:

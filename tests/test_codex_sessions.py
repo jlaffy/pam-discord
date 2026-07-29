@@ -1,11 +1,9 @@
 from __future__ import annotations
 
 import json
-import subprocess
 import asyncio
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
 
 from pam_discord.bot import (
     ConnectorApprovalView,
@@ -21,7 +19,7 @@ from pam_discord.bot import (
     _recently_mirrored,
     _remote_project_command,
 )
-from pam_discord.app_server import save_shared_sessions
+from pam_discord.app_server import load_shared_sessions, save_shared_sessions
 from pam_discord.config import ChannelConfig, Config, load_config
 
 
@@ -44,36 +42,58 @@ def _bot(tmp_path: Path) -> PamDiscord:
     )
 
 
-def test_new_task_is_saved_and_followup_resumes_same_session(tmp_path: Path) -> None:
+def test_discord_session_is_mapped_before_app_server_turn_starts(
+    tmp_path: Path, monkeypatch
+) -> None:
     workspace = tmp_path / "project"
     conversation = tmp_path / "archive" / "conversations" / "123"
-    first = conversation / "messages" / "1"
-    second = conversation / "messages" / "2"
+    project_conversation = workspace / ".pam" / "conversations" / "123"
     workspace.mkdir()
-    first.mkdir(parents=True)
-    second.mkdir(parents=True)
-    session_id = "019f810a-a580-7200-9df7-40b523d9a878"
-
-    def fake_run(command: list[str], **_: object) -> subprocess.CompletedProcess[str]:
-        output_path = Path(command[command.index("-o") + 1])
-        output_path.write_text("FIRST" if "resume" not in command else "SECOND", encoding="utf-8")
-        event = json.dumps({"type": "thread.started", "thread_id": session_id}) + "\n"
-        return subprocess.CompletedProcess(command, 0, stdout=event, stderr="")
-
+    conversation.mkdir(parents=True)
+    project_conversation.mkdir(parents=True)
+    (project_conversation / "metadata.json").write_text(
+        json.dumps({"discord_thread_id": 123}) + "\n", encoding="utf-8"
+    )
+    channel = ChannelConfig(workspace=workspace, project_record_dir=workspace / ".pam")
     bot = _bot(tmp_path)
-    with patch("pam_discord.bot.subprocess.run", side_effect=fake_run) as run:
-        output1, returned1 = bot._run_codex("first", workspace, conversation, first)
-        output2, returned2 = bot._run_codex("second", workspace, conversation, second)
 
-    assert (output1, output2) == ("FIRST", "SECOND")
-    assert returned1 == returned2 == session_id
-    assert "resume" not in run.call_args_list[0].args[0]
-    assert "resume" in run.call_args_list[1].args[0]
-    assert "--dangerously-bypass-approvals-and-sandbox" in run.call_args_list[0].args[0]
-    assert "--dangerously-bypass-approvals-and-sandbox" in run.call_args_list[1].args[0]
-    assert json.loads((conversation / "state.json").read_text())["codex_session_id"] == session_id
-    assert (first / "codex-events.jsonl").exists()
-    assert (second / "codex-events.jsonl").exists()
+    class DiscordThread:
+        id = 123
+
+    monkeypatch.setattr("pam_discord.bot.discord.Thread", DiscordThread)
+    calls: list[tuple[str, dict[str, object]]] = []
+
+    async def request(method: str, params: dict[str, object]) -> dict[str, object]:
+        calls.append((method, params))
+        if method == "thread/start":
+            return {"thread": {"id": "codex-thread"}}
+        assert load_shared_sessions(workspace) == {"codex-thread": 123}
+        return {"turn": {"id": "turn-1", "status": "inProgress"}}
+
+    bot._app_server.request = request  # type: ignore[method-assign]
+
+    returned = asyncio.run(
+        bot._start_discord_codex_session(
+            channel,
+            DiscordThread(),
+            456,
+            "Do the work",
+            conversation,
+            project_conversation,
+        )
+    )
+
+    assert returned == "codex-thread"
+    assert [method for method, _params in calls] == ["thread/start", "turn/start"]
+    assert calls[0][1]["cwd"] == str(workspace)
+    assert calls[1][1]["threadId"] == "codex-thread"
+    assert calls[1][1]["clientUserMessageId"] == "discord:456"
+    assert json.loads((conversation / "state.json").read_text())[
+        "codex_session_id"
+    ] == "codex-thread"
+    assert json.loads((project_conversation / "metadata.json").read_text())[
+        "codex_thread_id"
+    ] == "codex-thread"
 
 
 def test_linked_terminal_sessions_are_polled_for_new_turns(tmp_path: Path) -> None:
