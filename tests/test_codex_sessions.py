@@ -207,6 +207,40 @@ def test_live_events_disable_compatibility_polling(tmp_path: Path) -> None:
     assert _load_polled_sessions(workspace) == set()
 
 
+def test_typing_spans_the_complete_app_server_turn(tmp_path: Path, monkeypatch) -> None:
+    bot = _bot(tmp_path)
+    lifecycle: list[str] = []
+
+    class Typing:
+        async def __aenter__(self):
+            lifecycle.append("start")
+
+        async def __aexit__(self, *_args):
+            lifecycle.append("stop")
+
+    class DiscordThread:
+        id = 123
+
+        def typing(self):
+            return Typing()
+
+    monkeypatch.setattr("pam_discord.bot.discord.Thread", DiscordThread)
+    bot._discord_thread_for_codex = lambda _thread_id: 123  # type: ignore[method-assign]
+    bot.get_channel = lambda _channel_id: DiscordThread()  # type: ignore[method-assign]
+
+    async def exercise() -> None:
+        await bot._handle_app_server_notification(
+            {"method": "turn/started", "params": {"threadId": "codex-thread"}}
+        )
+        assert lifecycle == ["start"]
+        await bot._handle_app_server_notification(
+            {"method": "turn/completed", "params": {"threadId": "codex-thread"}}
+        )
+
+    asyncio.run(exercise())
+    assert lifecycle == ["start", "stop"]
+
+
 def test_recent_mirror_content_is_deduplicated_across_different_item_ids() -> None:
     cache: dict[tuple[str, str, str], float] = {}
     key = ("thread-1", "agentMessage", "same response")

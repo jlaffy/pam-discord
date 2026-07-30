@@ -285,6 +285,7 @@ class PamDiscord(discord.Client):
         self._linking_codex_threads: set[str] = set()
         self._last_catalog_sync = 0.0
         self._membership_synced_threads: set[int] = set()
+        self._turn_typing: dict[str, object] = {}
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -295,6 +296,10 @@ class PamDiscord(discord.Client):
     async def close(self) -> None:
         if self._link_watcher is not None:
             self._link_watcher.cancel()
+        await asyncio.gather(
+            *(self._stop_turn_typing(thread_id) for thread_id in tuple(self._turn_typing)),
+            return_exceptions=True,
+        )
         await self._app_server.close()
         await super().close()
 
@@ -947,7 +952,20 @@ class PamDiscord(discord.Client):
                             )
                 await self._app_server.respond(request_id, {"action": action})
             return
-        if method == "thread/started":
+        if method == "turn/started":
+            await self._start_turn_typing(str(params.get("threadId") or ""))
+            await asyncio.to_thread(
+                self._record_app_server_event,
+                str(params.get("threadId") or ""),
+                event,
+            )
+        elif method in {"turn/completed", "turn/failed", "turn/cancelled"}:
+            codex_thread_id = str(params.get("threadId") or "")
+            await self._stop_turn_typing(codex_thread_id)
+            await asyncio.to_thread(
+                self._record_app_server_event, codex_thread_id, event
+            )
+        elif method == "thread/started":
             thread_value = params.get("thread")
             if isinstance(thread_value, dict):
                 if str(thread_value.get("name") or thread_value.get("preview") or "").strip():
@@ -958,18 +976,26 @@ class PamDiscord(discord.Client):
                             str(thread_value.get("id") or "")
                         )
                     )
-                self._record_app_server_event(str(thread_value.get("id") or ""), event)
+                await asyncio.to_thread(
+                    self._record_app_server_event,
+                    str(thread_value.get("id") or ""),
+                    event,
+                )
         elif method == "item/completed":
             codex_thread_id = str(params.get("threadId") or "")
-            self._stop_polling_live_session(codex_thread_id)
-            self._record_app_server_event(codex_thread_id, event)
+            await asyncio.to_thread(self._stop_polling_live_session, codex_thread_id)
+            await asyncio.to_thread(
+                self._record_app_server_event, codex_thread_id, event
+            )
             await self._mirror_completed_codex_item(params)
         elif method == "thread/name/updated":
             codex_thread_id = str(params.get("threadId") or "")
             title = _clean_thread_title(
                 str(params.get("threadName") or params.get("name") or "")
             )
-            discord_thread_id = self._discord_thread_for_codex(codex_thread_id)
+            discord_thread_id = await asyncio.to_thread(
+                self._discord_thread_for_codex, codex_thread_id
+            )
             if discord_thread_id is not None and title:
                 discord_thread = self.get_channel(discord_thread_id)
                 if not isinstance(discord_thread, discord.Thread):
@@ -979,9 +1005,40 @@ class PamDiscord(discord.Client):
                         discord_thread = None
                 if isinstance(discord_thread, discord.Thread):
                     await self._edit_discord_thread_name(discord_thread, title)
-            self._record_app_server_event(codex_thread_id, event)
+            await asyncio.to_thread(
+                self._record_app_server_event, codex_thread_id, event
+            )
         else:
-            self._record_app_server_event(str(params.get("threadId") or ""), event)
+            await asyncio.to_thread(
+                self._record_app_server_event,
+                str(params.get("threadId") or ""),
+                event,
+            )
+
+    async def _start_turn_typing(self, codex_thread_id: str) -> None:
+        if not codex_thread_id or codex_thread_id in self._turn_typing:
+            return
+        discord_thread_id = await asyncio.to_thread(
+            self._discord_thread_for_codex, codex_thread_id
+        )
+        if discord_thread_id is None:
+            return
+        thread = self.get_channel(discord_thread_id)
+        if not isinstance(thread, discord.Thread):
+            try:
+                thread = await self.fetch_channel(discord_thread_id)
+            except discord.HTTPException:
+                return
+        if not isinstance(thread, discord.Thread):
+            return
+        typing = thread.typing()
+        await typing.__aenter__()
+        self._turn_typing[codex_thread_id] = typing
+
+    async def _stop_turn_typing(self, codex_thread_id: str) -> None:
+        typing = self._turn_typing.pop(codex_thread_id, None)
+        if typing is not None:
+            await typing.__aexit__(None, None, None)  # type: ignore[attr-defined]
 
     def _discord_thread_for_codex(self, codex_thread_id: str) -> int | None:
         for channel_config in self.config.guilds.values():

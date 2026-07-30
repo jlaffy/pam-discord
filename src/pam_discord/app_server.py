@@ -7,23 +7,27 @@ import shutil
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 
-import aiohttp
-
 NotificationHandler = Callable[[dict[str, object]], Awaitable[None]]
 
 
 class CodexAppServer:
+    """An owned Codex app-server using its supported JSONL stdio transport."""
+
     def __init__(self, url: str, handler: NotificationHandler) -> None:
+        # Keep url in the API/config for compatibility with existing installations. Pam
+        # deliberately owns a stdio server now; websocket listening is experimental and
+        # allowed stale, independently-owned processes to outlive Pam.
         self.url = url
         self.handler = handler
         self._process: asyncio.subprocess.Process | None = None
-        self._session: aiohttp.ClientSession | None = None
-        self._socket: aiohttp.ClientWebSocketResponse | None = None
         self._reader: asyncio.Task[None] | None = None
+        self._stderr_reader: asyncio.Task[None] | None = None
+        self._handler_tasks: set[asyncio.Task[None]] = set()
         self._next_id = 1
         self._pending: dict[int, asyncio.Future[object]] = {}
         self._binary: str | None = None
         self._connect_lock = asyncio.Lock()
+        self._write_lock = asyncio.Lock()
         self._closing = False
 
     async def start(self, codex_binary: str) -> None:
@@ -36,15 +40,17 @@ class CodexAppServer:
     async def _connect(self) -> None:
         if self._binary is None:
             raise RuntimeError("Codex app-server has not been started")
-        if self._session is None or self._session.closed:
-            self._session = aiohttp.ClientSession()
-        try:
-            self._socket = await self._session.ws_connect(self.url)
-        except aiohttp.ClientError:
-            self._socket = None
-        if self._socket is None:
-            await self._start_process(self._binary)
-        self._reader = asyncio.create_task(self._read_loop())
+        await self._discard_process()
+        self._process = await asyncio.create_subprocess_exec(
+            self._binary,
+            "app-server",
+            "--stdio",
+            stdin=asyncio.subprocess.PIPE,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        self._reader = asyncio.create_task(self._read_loop(self._process))
+        self._stderr_reader = asyncio.create_task(self._drain_stderr(self._process))
         await self._request_connected(
             "initialize",
             {
@@ -55,118 +61,136 @@ class CodexAppServer:
                 }
             },
         )
-        assert self._socket is not None
-        await self._socket.send_json({"method": "initialized", "params": {}})
+        await self._send({"method": "initialized", "params": {}})
 
-    async def _ensure_connected(self) -> None:
-        if (
-            self._socket is not None
-            and not self._socket.closed
+    def _connected(self) -> bool:
+        return (
+            self._process is not None
+            and self._process.returncode is None
+            and self._process.stdin is not None
+            and not self._process.stdin.is_closing()
             and self._reader is not None
             and not self._reader.done()
-        ):
+        )
+
+    async def _ensure_connected(self) -> None:
+        if self._connected():
             return
         async with self._connect_lock:
-            if (
-                self._socket is not None
-                and not self._socket.closed
-                and self._reader is not None
-                and not self._reader.done()
-            ):
-                return
-            await self._connect()
-
-    async def _start_process(self, binary: str) -> None:
-        self._process = await asyncio.create_subprocess_exec(
-            binary,
-            "app-server",
-            "--listen",
-            self.url,
-            stdout=asyncio.subprocess.DEVNULL,
-            stderr=asyncio.subprocess.PIPE,
-        )
-        assert self._session is not None
-        for _ in range(50):
-            try:
-                self._socket = await self._session.ws_connect(self.url)
-                break
-            except aiohttp.ClientError:
-                if self._process.returncode is not None:
-                    detail = await self._process.stderr.read() if self._process.stderr else b""
-                    raise RuntimeError(detail.decode().strip() or "Codex app-server stopped")
-                await asyncio.sleep(0.1)
-        if self._socket is None:
-            raise RuntimeError("Timed out connecting to Codex app-server")
+            if not self._connected():
+                await self._connect()
 
     async def close(self) -> None:
         self._closing = True
-        if self._socket is not None:
-            await self._socket.close()
-        if self._reader is not None:
-            self._reader.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await self._reader
-        if self._session is not None:
-            await self._session.close()
-        if self._process is not None and self._process.returncode is None:
-            self._process.terminate()
-            await self._process.wait()
+        self._fail_pending(ConnectionError("Codex app-server closed"))
+        await self._discard_process()
+        for task in tuple(self._handler_tasks):
+            task.cancel()
+        if self._handler_tasks:
+            await asyncio.gather(*self._handler_tasks, return_exceptions=True)
+
+    async def _discard_process(self) -> None:
+        process, reader, stderr_reader = self._process, self._reader, self._stderr_reader
+        self._process = None
+        self._reader = None
+        self._stderr_reader = None
+        current = asyncio.current_task()
+        for task in (reader, stderr_reader):
+            if task is not None and task is not current:
+                task.cancel()
+        if process is not None and process.returncode is None:
+            process.terminate()
+            with contextlib.suppress(ProcessLookupError, asyncio.TimeoutError):
+                await asyncio.wait_for(process.wait(), timeout=5)
+            if process.returncode is None:
+                process.kill()
+                await process.wait()
+        for task in (reader, stderr_reader):
+            if task is not None and task is not current:
+                with contextlib.suppress(asyncio.CancelledError):
+                    await task
 
     async def request(self, method: str, params: dict[str, object]) -> object:
         await self._ensure_connected()
         return await self._request_connected(method, params)
 
     async def _request_connected(self, method: str, params: dict[str, object]) -> object:
-        if self._socket is None:
-            raise RuntimeError("Codex app-server is not connected")
         request_id = self._next_id
         self._next_id += 1
         future: asyncio.Future[object] = asyncio.get_running_loop().create_future()
         self._pending[request_id] = future
-        await self._socket.send_json({"method": method, "id": request_id, "params": params})
         try:
+            await self._send({"method": method, "id": request_id, "params": params})
             return await asyncio.wait_for(future, timeout=30)
         finally:
             self._pending.pop(request_id, None)
 
     async def notify(self, method: str, params: dict[str, object]) -> None:
         await self._ensure_connected()
-        if self._socket is None:
-            raise RuntimeError("Codex app-server is not connected")
-        await self._socket.send_json({"method": method, "params": params})
+        await self._send({"method": method, "params": params})
 
     async def respond(self, request_id: int, result: dict[str, object]) -> None:
-        """Answer a request initiated by the app server."""
         await self._ensure_connected()
-        if self._socket is None:
-            raise RuntimeError("Codex app-server is not connected")
-        await self._socket.send_json({"id": request_id, "result": result})
+        await self._send({"id": request_id, "result": result})
 
-    async def _read_loop(self) -> None:
-        assert self._socket is not None
-        socket = self._socket
+    async def _send(self, value: dict[str, object]) -> None:
+        process = self._process
+        if process is None or process.stdin is None or process.returncode is not None:
+            raise ConnectionError("Codex app-server is not connected")
+        data = (json.dumps(value, separators=(",", ":")) + "\n").encode()
+        async with self._write_lock:
+            process.stdin.write(data)
+            await process.stdin.drain()
+
+    def _complete_pending(
+        self, request_id: int, *, result: object = None, error: BaseException | None = None
+    ) -> None:
+        future = self._pending.pop(request_id, None)
+        if future is None or future.done():
+            return
+        if error is not None:
+            future.set_exception(error)
+        else:
+            future.set_result(result)
+
+    def _fail_pending(self, error: BaseException) -> None:
+        # Pop before completion so timeout, reconnect and reader shutdown cannot
+        # complete the same Future twice (the old InvalidStateError).
+        pending, self._pending = self._pending, {}
+        for future in pending.values():
+            if not future.done():
+                future.set_exception(error)
+
+    async def _read_loop(self, process: asyncio.subprocess.Process) -> None:
+        assert process.stdout is not None
         try:
-            async for message in socket:
-                if message.type != aiohttp.WSMsgType.TEXT:
-                    continue
-                value = json.loads(message.data)
+            while line := await process.stdout.readline():
+                value = json.loads(line)
                 request_id = value.get("id")
-                if isinstance(request_id, int) and request_id in self._pending:
-                    future = self._pending.pop(request_id)
-                    if "error" in value:
-                        future.set_exception(RuntimeError(str(value["error"])))
-                    else:
-                        future.set_result(value.get("result"))
+                if isinstance(request_id, int) and (
+                    "result" in value or "error" in value
+                ):
+                    error = (
+                        RuntimeError(str(value["error"])) if "error" in value else None
+                    )
+                    self._complete_pending(
+                        request_id, result=value.get("result"), error=error
+                    )
                 elif isinstance(value.get("method"), str):
-                    asyncio.create_task(self.handler(value))
+                    task = asyncio.create_task(self.handler(value))
+                    self._handler_tasks.add(task)
+                    task.add_done_callback(self._handler_tasks.discard)
         finally:
-            if self._socket is socket:
-                self._socket = None
+            if self._process is process:
+                self._process = None
             if not self._closing:
-                error = ConnectionError("Codex app-server connection closed")
-                for future in self._pending.values():
-                    if not future.done():
-                        future.set_exception(error)
+                self._fail_pending(ConnectionError("Codex app-server connection closed"))
+
+    @staticmethod
+    async def _drain_stderr(process: asyncio.subprocess.Process) -> None:
+        assert process.stderr is not None
+        while await process.stderr.readline():
+            pass
 
 
 def shared_session_registry(workspace: Path) -> Path:

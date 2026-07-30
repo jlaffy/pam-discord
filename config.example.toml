@@ -9,7 +9,8 @@ whisper_device = "cpu"
 whisper_compute_type = "int8"
 codex_binary = "codex"
 codex_timeout_seconds = 1800
-codex_app_server_url = "ws://127.0.0.1:45832"
+# Kept for compatibility; pam owns a supported stdio app-server process.
+codex_app_server_url = "stdio://"
 
 [guilds."234567890123456789"]
 workspace = "/absolute/path/to/agent-native-genomics"
