@@ -12,6 +12,7 @@ class ChannelConfig:
     instruction_prefix: str = ""
     project_record_dir: Path | None = None
     project_root: Path | None = None
+    session_state_dir: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -33,6 +34,8 @@ class Config:
     whisper_beam_size: int = 1
     config_path: Path | None = None
     project_roots: tuple[Path, ...] = ()
+    always_on_guild_id: int | None = None
+    always_on_state_dir: Path | None = None
 
 
 def load_config(path: Path) -> Config:
@@ -88,7 +91,25 @@ def load_config(path: Path) -> Config:
             project_record_dir=record_dir,
             project_root=workspace,
         )
-    if not channels and not guilds:
+    always_on = raw.get("always_on")
+    always_on_guild_id = None
+    always_on_state_dir = None
+    always_on_roots: tuple[Path, ...] = ()
+    if isinstance(always_on, dict) and always_on.get("guild_id"):
+        always_on_guild_id = int(always_on["guild_id"])
+        always_on_state_dir = Path(
+            str(always_on.get("state_dir", "./always-on-state"))
+        ).expanduser().resolve()
+        roots = always_on.get("approved_roots", [])
+        always_on_roots = tuple(
+            Path(str(value)).expanduser().resolve() for value in roots
+        )
+        if not always_on_roots:
+            raise ValueError("always_on approved_roots must contain at least one directory")
+        for root in always_on_roots:
+            if not root.is_dir():
+                raise ValueError(f"always_on approved root is not a directory: {root}")
+    if not channels and not guilds and always_on_guild_id is None:
         raise ValueError("at least one Discord server or channel mapping is required")
     project_roots: tuple[Path, ...] = ()
     hub = raw.get("hub")
@@ -126,5 +147,7 @@ def load_config(path: Path) -> Config:
         codex_full_access=bool(raw.get("codex_full_access", True)),
         whisper_beam_size=int(raw.get("whisper_beam_size", 1)),
         config_path=path.expanduser().resolve(),
-        project_roots=project_roots,
+        project_roots=tuple(dict.fromkeys((*project_roots, *always_on_roots))),
+        always_on_guild_id=always_on_guild_id,
+        always_on_state_dir=always_on_state_dir,
     )

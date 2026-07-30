@@ -96,6 +96,128 @@ def test_discord_session_is_mapped_before_app_server_turn_starts(
     ] == "codex-thread"
 
 
+def test_always_on_config_discovers_git_project_without_channel_mappings(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "projects"
+    project = root / "sp_atlas"
+    cwd = project / "results" / "mutagenesis"
+    cwd.mkdir(parents=True)
+    (project / ".git").mkdir()
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'archive_dir = "{tmp_path / "archive"}"',
+                "allowed_user_ids = [1]",
+                "",
+                "[always_on]",
+                "guild_id = 99",
+                f'approved_roots = ["{root}"]',
+                f'state_dir = "{tmp_path / "canary"}"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    config = load_config(config_path)
+    bot = PamDiscord(config)
+    discovered = bot._workspace_config_for_cwd(cwd)
+
+    assert config.always_on_guild_id == 99
+    assert discovered is not None
+    assert discovered.workspace == project
+    assert discovered.project_record_dir is not None
+    assert discovered.project_record_dir.is_relative_to(tmp_path / "canary")
+    assert discovered.session_state_dir != project
+
+
+def test_always_on_directory_index_groups_sessions_by_relative_cwd(
+    tmp_path: Path,
+) -> None:
+    project = tmp_path / "sp_atlas"
+    records = tmp_path / "state" / "conversations"
+    project.mkdir()
+    for thread_id, relative, title in (
+        (101, ".", "Plan analysis"),
+        (102, "results/mutagenesis", "Review VEGFA peaks"),
+    ):
+        conversation = records / str(thread_id)
+        conversation.mkdir(parents=True)
+        (conversation / "metadata.json").write_text(
+            json.dumps(
+                {
+                    "discord_thread_id": thread_id,
+                    "workspace": str((project / relative).resolve()),
+                    "title": title,
+                }
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+    bot = _bot(tmp_path)
+    object.__setattr__(bot.config, "always_on_guild_id", 99)
+    channel = ChannelConfig(
+        workspace=project,
+        project_root=project,
+        project_record_dir=records,
+        session_state_dir=tmp_path / "state",
+    )
+
+    text = bot._directory_index_text(channel)
+
+    assert "sp_atlas/" in text
+    assert "root/" in text
+    assert "results/" in text
+    assert "mutagenesis/" in text
+    assert "Plan analysis" in text
+    assert "Review VEGFA peaks" in text
+    assert "https://discord.com/channels/99/102" in text
+
+
+def test_always_on_catalog_checkpoint_skips_unchanged_sessions(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "projects"
+    project = root / "project"
+    project.mkdir(parents=True)
+    bot = _bot(tmp_path)
+    object.__setattr__(bot.config, "always_on_guild_id", 99)
+    object.__setattr__(bot.config, "always_on_state_dir", tmp_path / "state")
+    object.__setattr__(bot.config, "project_roots", (root,))
+    value = {
+        "id": "codex-thread",
+        "cwd": str(project),
+        "preview": "First prompt",
+        "updatedAt": 1,
+    }
+    linked: list[str] = []
+
+    async def request(_method: str, _params: dict[str, object]) -> dict[str, object]:
+        return {"data": [dict(value)], "nextCursor": None}
+
+    async def link(thread: dict[str, object]) -> None:
+        linked.append(str(thread["id"]))
+
+    bot._app_server.request = request  # type: ignore[method-assign]
+    bot._link_started_codex_thread = link  # type: ignore[method-assign]
+
+    async def exercise() -> None:
+        await bot._sync_project_session_catalogs()
+        await bot._sync_project_session_catalogs()
+        value["updatedAt"] = 2
+        await bot._sync_project_session_catalogs()
+
+    asyncio.run(exercise())
+
+    assert linked == ["codex-thread", "codex-thread"]
+    checkpoint = json.loads(
+        (tmp_path / "state" / "catalog-checkpoint.json").read_text()
+    )
+    assert checkpoint["initialized"] is True
+
+
 def test_linked_terminal_sessions_are_polled_for_new_turns(tmp_path: Path) -> None:
     workspace = tmp_path / "project"
     workspace.mkdir()

@@ -12,6 +12,13 @@ codex_timeout_seconds = 1800
 # Kept for compatibility; pam owns a supported stdio app-server process.
 codex_app_server_url = "stdio://"
 
+# Experimental: automatically mirror Codex sessions beneath these roots into one
+# Discord server, using one Forum channel per discovered project.
+# [always_on]
+# guild_id = 456789012345678901
+# approved_roots = ["/absolute/path/to/projects"]
+# state_dir = "./always-on-state"
+
 [guilds."234567890123456789"]
 workspace = "/absolute/path/to/agent-native-genomics"
 run_codex = true

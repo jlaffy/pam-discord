@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import atexit
 import asyncio
+import hashlib
 import json
 import logging
 import os
@@ -286,6 +287,10 @@ class PamDiscord(discord.Client):
         self._last_catalog_sync = 0.0
         self._membership_synced_threads: set[int] = set()
         self._turn_typing: dict[str, object] = {}
+        self._always_on_projects: dict[Path, ChannelConfig] = {}
+        self._always_on_lock = asyncio.Lock()
+        self._index_update_tasks: dict[Path, asyncio.Task[None]] = {}
+        self._catalog_sync_lock = asyncio.Lock()
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -300,6 +305,8 @@ class PamDiscord(discord.Client):
             *(self._stop_turn_typing(thread_id) for thread_id in tuple(self._turn_typing)),
             return_exceptions=True,
         )
+        for task in self._index_update_tasks.values():
+            task.cancel()
         await self._app_server.close()
         await super().close()
 
@@ -325,6 +332,262 @@ class PamDiscord(discord.Client):
         guild = getattr(channel, "guild", None)
         guild_id = getattr(guild, "id", None)
         return self.config.guilds.get(guild_id)
+
+    def _all_channel_configs(self) -> list[ChannelConfig]:
+        unique: dict[tuple[Path, Path], ChannelConfig] = {}
+        for item in (
+            *self.config.guilds.values(),
+            *self.config.channels.values(),
+            *self._always_on_projects.values(),
+        ):
+            state = item.session_state_dir or item.workspace
+            unique[(item.workspace, state)] = item
+        return list(unique.values())
+
+    @staticmethod
+    def _session_state_workspace(channel_config: ChannelConfig) -> Path:
+        return channel_config.session_state_dir or channel_config.workspace
+
+    def _load_channel_sessions(self, channel_config: ChannelConfig) -> dict[str, int]:
+        return load_shared_sessions(self._session_state_workspace(channel_config))
+
+    def _save_channel_sessions(
+        self, channel_config: ChannelConfig, sessions: dict[str, int]
+    ) -> None:
+        save_shared_sessions(self._session_state_workspace(channel_config), sessions)
+
+    def _detect_project_root(self, cwd: Path) -> Path | None:
+        cwd = cwd.resolve()
+        roots = sorted(
+            _allowed_project_roots(self.config),
+            key=lambda item: len(item.parts),
+            reverse=True,
+        )
+        approved = next(
+            (root for root in roots if cwd == root or cwd.is_relative_to(root)),
+            None,
+        )
+        if approved is None:
+            return None
+        candidate = cwd
+        while candidate != approved.parent:
+            if (candidate / ".git").exists():
+                return candidate
+            if candidate == approved:
+                break
+            candidate = candidate.parent
+        if cwd == approved:
+            return approved
+        relative = cwd.relative_to(approved)
+        return approved / relative.parts[0]
+
+    def _always_on_project_config(self, cwd: Path) -> ChannelConfig | None:
+        if self.config.always_on_guild_id is None or self.config.always_on_state_dir is None:
+            return None
+        project_root = self._detect_project_root(cwd)
+        if project_root is None:
+            return None
+        existing = self._always_on_projects.get(project_root)
+        if existing is not None:
+            return existing
+        digest = hashlib.sha256(str(project_root).encode()).hexdigest()[:10]
+        project_state = (
+            self.config.always_on_state_dir
+            / "projects"
+            / f"{_safe_name(project_root.name).lower()}-{digest}"
+        )
+        project_state.mkdir(parents=True, exist_ok=True)
+        config = ChannelConfig(
+            workspace=project_root,
+            project_root=project_root,
+            run_codex=True,
+            instruction_prefix="Follow this project's instructions.",
+            project_record_dir=project_state / "conversations",
+            session_state_dir=project_state,
+        )
+        self._always_on_projects[project_root] = config
+        return config
+
+    async def _always_on_forum(
+        self, channel_config: ChannelConfig
+    ) -> discord.ForumChannel | None:
+        guild_id = self.config.always_on_guild_id
+        if guild_id is None or channel_config.session_state_dir is None:
+            return None
+        existing = next(
+            (
+                self.get_channel(channel_id)
+                for channel_id, item in self.config.channels.items()
+                if item is channel_config
+            ),
+            None,
+        )
+        if isinstance(existing, discord.ForumChannel):
+            return existing
+        guild = self.get_guild(guild_id)
+        if guild is None:
+            return None
+        async with self._always_on_lock:
+            existing = next(
+                (
+                    self.get_channel(channel_id)
+                    for channel_id, item in self.config.channels.items()
+                    if item is channel_config
+                ),
+                None,
+            )
+            if isinstance(existing, discord.ForumChannel):
+                return existing
+            base = re.sub(r"[^a-z0-9-]+", "-", channel_config.workspace.name.lower())
+            name = base.strip("-")[:90] or "project"
+            topic = f"Pam sessions in {channel_config.workspace}"
+            forum = next(
+                (
+                    item
+                    for item in guild.forums
+                    if item.name == name and item.topic == topic
+                ),
+                None,
+            )
+            if forum is None and any(item.name == name for item in guild.forums):
+                digest = hashlib.sha256(
+                    str(channel_config.workspace).encode()
+                ).hexdigest()[:6]
+                name = f"{name[:83]}-{digest}"
+                forum = discord.utils.get(guild.forums, name=name)
+            if forum is None:
+                forum = await guild.create_forum(
+                    name,
+                    topic=topic,
+                    reason="Pam always-on project discovery",
+                )
+            self.config.channels[forum.id] = channel_config
+            return forum
+
+    def _schedule_directory_index(self, channel_config: ChannelConfig) -> None:
+        if channel_config.session_state_dir is None:
+            return
+        existing = self._index_update_tasks.get(channel_config.workspace)
+        if existing is not None and not existing.done():
+            existing.cancel()
+        self._index_update_tasks[channel_config.workspace] = asyncio.create_task(
+            self._update_directory_index_after_delay(channel_config)
+        )
+
+    async def _update_directory_index_after_delay(
+        self, channel_config: ChannelConfig
+    ) -> None:
+        try:
+            await asyncio.sleep(2)
+            await self._update_directory_index(channel_config)
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            LOG.exception("failed to update directory index for %s", channel_config.workspace)
+
+    def _directory_index_text(self, channel_config: ChannelConfig) -> str:
+        records = channel_config.project_record_dir
+        grouped: dict[str, list[tuple[str, int]]] = {}
+        if records is not None and records.exists():
+            for metadata_path in records.glob("*/metadata.json"):
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    cwd = Path(str(metadata.get("workspace") or channel_config.workspace))
+                    relative = (
+                        "root"
+                        if cwd == channel_config.workspace
+                        else str(cwd.relative_to(channel_config.workspace))
+                    )
+                    thread_id = int(metadata["discord_thread_id"])
+                    title = str(metadata.get("title") or f"Session {thread_id}")
+                except (KeyError, OSError, ValueError, json.JSONDecodeError):
+                    continue
+                grouped.setdefault(relative, []).append((title, thread_id))
+
+        tree: dict[str, object] = {}
+        counts: dict[tuple[str, ...], int] = {}
+        for relative, sessions in grouped.items():
+            parts = () if relative == "root" else tuple(Path(relative).parts)
+            node = tree
+            counts[parts] = len(sessions)
+            for part in parts:
+                child = node.setdefault(part, {})
+                if not isinstance(child, dict):
+                    break
+                node = child
+
+        lines = [f"{channel_config.workspace.name}/"]
+        if "root" in grouped:
+            lines.append(f"├── root/  {len(grouped['root'])} session(s)")
+
+        def render(node: dict[str, object], prefix: str = "") -> None:
+            items = sorted(node.items())
+            for index, (name, child) in enumerate(items):
+                last = index == len(items) - 1
+                path_prefix = prefix + ("└── " if last else "├── ")
+                lines.append(f"{path_prefix}{name}/")
+                if isinstance(child, dict):
+                    render(child, prefix + ("    " if last else "│   "))
+
+        render(tree)
+        if len(lines) == 1:
+            lines.append("└── No sessions discovered yet")
+
+        body = [
+            f"**Pam directory index · `{channel_config.workspace}`**",
+            "",
+            "```text",
+            *lines,
+            "```",
+            "",
+        ]
+        guild_id = self.config.always_on_guild_id
+        for relative, sessions in sorted(grouped.items()):
+            body.append(f"**`{relative}`**")
+            for title, thread_id in sessions[-5:]:
+                body.append(
+                    f"• [{title}](https://discord.com/channels/{guild_id}/{thread_id})"
+                )
+            body.append("")
+        return "\n".join(body)[:3900]
+
+    async def _update_directory_index(self, channel_config: ChannelConfig) -> None:
+        forum = await self._always_on_forum(channel_config)
+        state_dir = channel_config.session_state_dir
+        if forum is None or state_dir is None:
+            return
+        text = await asyncio.to_thread(self._directory_index_text, channel_config)
+        state_path = state_dir / "directory-index.json"
+        state = (
+            json.loads(state_path.read_text(encoding="utf-8"))
+            if state_path.exists()
+            else {}
+        )
+        thread_id = state.get("thread_id")
+        message_id = state.get("message_id")
+        if isinstance(thread_id, int) and isinstance(message_id, int):
+            thread = self.get_channel(thread_id)
+            if not isinstance(thread, discord.Thread):
+                try:
+                    thread = await self.fetch_channel(thread_id)
+                except discord.HTTPException:
+                    thread = None
+            if isinstance(thread, discord.Thread):
+                try:
+                    message = await thread.fetch_message(message_id)
+                    await message.edit(content=text)
+                    return
+                except discord.HTTPException:
+                    pass
+        created = await forum.create_thread(
+            name="📁 Directory index",
+            content=text,
+            auto_archive_duration=10080,
+        )
+        _write_json(
+            state_path,
+            {"thread_id": created.thread.id, "message_id": created.message.id},
+        )
 
     async def on_message(self, message: discord.Message) -> None:
         if message.author.bot or message.author.id not in self.config.allowed_user_ids:
@@ -644,7 +907,7 @@ class PamDiscord(discord.Client):
                 transcript,
             )
 
-            shared_thread_id = self._shared_codex_thread(channel_config.workspace, thread.id)
+            shared_thread_id = self._shared_codex_thread(channel_config, thread.id)
             if shared_thread_id is not None:
                 await self._app_server.request(
                     "thread/resume", {"threadId": shared_thread_id}
@@ -699,9 +962,9 @@ class PamDiscord(discord.Client):
 
         # Save the relationship before starting work. Notifications and the session
         # catalog can now recognize that this conversation already has a Discord thread.
-        sessions = load_shared_sessions(channel_config.workspace)
+        sessions = self._load_channel_sessions(channel_config)
         sessions[codex_thread_id] = discord_thread.id
-        save_shared_sessions(channel_config.workspace, sessions)
+        self._save_channel_sessions(channel_config, sessions)
         _write_json(
             conversation_dir / "state.json",
             {
@@ -714,7 +977,11 @@ class PamDiscord(discord.Client):
             if metadata_path.exists():
                 metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
                 metadata["codex_thread_id"] = codex_thread_id
+                metadata["title"] = str(
+                    getattr(discord_thread, "name", f"Session {discord_thread.id}")
+                )
                 _write_json(metadata_path, metadata)
+        self._schedule_directory_index(channel_config)
 
         turn_params: dict[str, object] = {
             "threadId": codex_thread_id,
@@ -844,20 +1111,25 @@ class PamDiscord(discord.Client):
         )
         return project_dir, project_message_dir
 
-    def _shared_codex_thread(self, workspace: Path, discord_thread_id: int) -> str | None:
-        for codex_thread_id, mapped_discord_id in load_shared_sessions(workspace).items():
+    def _shared_codex_thread(
+        self, channel_config: ChannelConfig, discord_thread_id: int
+    ) -> str | None:
+        for codex_thread_id, mapped_discord_id in self._load_channel_sessions(
+            channel_config
+        ).items():
             if mapped_discord_id == discord_thread_id:
                 return codex_thread_id
         return None
 
     def _codex_thread_for_discord(self, discord_thread_id: int) -> str | None:
         seen: set[Path] = set()
-        for channel_config in self.config.guilds.values():
-            if channel_config.workspace in seen:
+        for channel_config in self._all_channel_configs():
+            state = self._session_state_workspace(channel_config)
+            if state in seen:
                 continue
-            seen.add(channel_config.workspace)
+            seen.add(state)
             codex_thread_id = self._shared_codex_thread(
-                channel_config.workspace, discord_thread_id
+                channel_config, discord_thread_id
             )
             if codex_thread_id is not None:
                 return codex_thread_id
@@ -877,11 +1149,14 @@ class PamDiscord(discord.Client):
             raise
 
     def _workspace_config_for_cwd(self, cwd: Path) -> ChannelConfig | None:
+        discovered = self._always_on_project_config(cwd)
         matches = [
             item
-            for item in self.config.guilds.values()
+            for item in self._all_channel_configs()
             if cwd == item.workspace or cwd.is_relative_to(item.workspace)
         ]
+        if discovered is not None:
+            matches.append(discovered)
         return max(matches, key=lambda item: len(item.workspace.parts), default=None)
 
     async def _handle_app_server_notification(self, event: dict[str, object]) -> None:
@@ -1041,8 +1316,8 @@ class PamDiscord(discord.Client):
             await typing.__aexit__(None, None, None)  # type: ignore[attr-defined]
 
     def _discord_thread_for_codex(self, codex_thread_id: str) -> int | None:
-        for channel_config in self.config.guilds.values():
-            discord_thread_id = load_shared_sessions(channel_config.workspace).get(
+        for channel_config in self._all_channel_configs():
+            discord_thread_id = self._load_channel_sessions(channel_config).get(
                 codex_thread_id
             )
             if discord_thread_id is not None:
@@ -1080,9 +1355,10 @@ class PamDiscord(discord.Client):
     def _stop_polling_live_session(self, codex_thread_id: str) -> None:
         if not codex_thread_id:
             return
-        for channel_config in self.config.guilds.values():
-            if codex_thread_id in load_shared_sessions(channel_config.workspace):
-                _disable_session_polling(channel_config.workspace, codex_thread_id)
+        for channel_config in self._all_channel_configs():
+            state = self._session_state_workspace(channel_config)
+            if codex_thread_id in self._load_channel_sessions(channel_config):
+                _disable_session_polling(state, codex_thread_id)
                 return
 
     def _record_app_server_event(
@@ -1090,8 +1366,10 @@ class PamDiscord(discord.Client):
     ) -> None:
         if not codex_thread_id:
             return
-        for channel_config in self.config.guilds.values():
-            discord_thread_id = load_shared_sessions(channel_config.workspace).get(codex_thread_id)
+        for channel_config in self._all_channel_configs():
+            discord_thread_id = self._load_channel_sessions(channel_config).get(
+                codex_thread_id
+            )
             if discord_thread_id is None or channel_config.project_record_dir is None:
                 continue
             conversation_dir = channel_config.project_record_dir / str(discord_thread_id)
@@ -1121,23 +1399,26 @@ class PamDiscord(discord.Client):
                             if channel_config is not None:
                                 thread_id = str(thread.get("id") or "")
                                 _enable_session_polling(
-                                    channel_config.workspace, thread_id
+                                    self._session_state_workspace(channel_config), thread_id
                                 )
                                 await self._import_codex_history(thread_id)
                     path.unlink()
                 except Exception:
                     LOG.exception("failed to process pam link request %s", path)
             await self._sync_shared_sessions()
-            if time.monotonic() - self._last_catalog_sync >= 60:
+            catalog_interval = 2 if self.config.always_on_guild_id is not None else 60
+            if time.monotonic() - self._last_catalog_sync >= catalog_interval:
                 self._last_catalog_sync = time.monotonic()
-                await self._sync_project_session_catalogs()
+                asyncio.create_task(self._sync_project_session_catalogs())
             await asyncio.sleep(2)
 
     async def _sync_shared_sessions(self) -> None:
         """Import turns written by Codex clients that predate `pam codex`."""
         seen: set[str] = set()
-        for channel_config in self.config.guilds.values():
-            for codex_thread_id in _load_polled_sessions(channel_config.workspace):
+        for channel_config in self._all_channel_configs():
+            for codex_thread_id in _load_polled_sessions(
+                self._session_state_workspace(channel_config)
+            ):
                 if codex_thread_id in seen:
                     continue
                 seen.add(codex_thread_id)
@@ -1148,37 +1429,94 @@ class PamDiscord(discord.Client):
 
     async def _sync_project_session_catalogs(self) -> None:
         """Create missing Discord threads for all saved sessions in connected projects."""
-        cursor: str | None = None
-        while True:
-            params: dict[str, object] = {
-                "sourceKinds": ["cli", "exec", "appServer"],
-                "archived": False,
-                "limit": 100,
-                "sortKey": "recency_at",
-                "sortDirection": "desc",
-            }
-            if cursor is not None:
-                params["cursor"] = cursor
-            try:
-                result = await self._app_server.request("thread/list", params)
-            except Exception:
-                LOG.exception("failed to list Codex conversations")
-                break
-            if not isinstance(result, dict):
-                break
-            for value in result.get("data", []):
-                if not isinstance(value, dict):
-                    continue
-                if not str(value.get("name") or value.get("preview") or "").strip():
-                    continue
+        if self._catalog_sync_lock.locked():
+            return
+        async with self._catalog_sync_lock:
+            state_path = (
+                self.config.always_on_state_dir / "catalog-checkpoint.json"
+                if self.config.always_on_state_dir is not None
+                else None
+            )
+            checkpoint: dict[str, str] = {}
+            initialized = False
+            if state_path is not None and state_path.exists():
                 try:
-                    await self._link_started_codex_thread(value)
+                    raw_state = await asyncio.to_thread(
+                        state_path.read_text, encoding="utf-8"
+                    )
+                    state = json.loads(raw_state)
+                    checkpoint = {
+                        str(key): str(value)
+                        for key, value in dict(state.get("sessions", {})).items()
+                    }
+                    initialized = bool(state.get("initialized"))
+                except (OSError, ValueError, json.JSONDecodeError):
+                    LOG.warning("ignoring invalid catalog checkpoint %s", state_path)
+
+            cursor: str | None = None
+            catalog_changed = False
+            while True:
+                params: dict[str, object] = {
+                    "sourceKinds": ["cli", "exec", "appServer"],
+                    "archived": False,
+                    "limit": 100,
+                    "sortKey": "recency_at",
+                    "sortDirection": "desc",
+                }
+                if cursor is not None:
+                    params["cursor"] = cursor
+                try:
+                    result = await self._app_server.request("thread/list", params)
                 except Exception:
-                    LOG.exception("failed to mirror Codex session %s", value.get("id"))
-            next_cursor = result.get("nextCursor")
-            if not isinstance(next_cursor, str) or not next_cursor:
-                break
-            cursor = next_cursor
+                    LOG.exception("failed to list Codex conversations")
+                    return
+                if not isinstance(result, dict):
+                    return
+                for value in result.get("data", []):
+                    if not isinstance(value, dict):
+                        continue
+                    codex_thread_id = str(value.get("id") or "")
+                    if not codex_thread_id:
+                        continue
+                    fingerprint = "|".join(
+                        str(value.get(key) or "")
+                        for key in ("updatedAt", "updated_at", "name", "preview")
+                    )
+                    if initialized and checkpoint.get(codex_thread_id) == fingerprint:
+                        continue
+                    try:
+                        await self._link_started_codex_thread(value)
+                        channel_config = self._workspace_config_for_cwd(
+                            Path(str(value.get("cwd") or "")).resolve()
+                        )
+                        if (
+                            initialized
+                            and channel_config is not None
+                            and channel_config.session_state_dir is not None
+                            and codex_thread_id
+                            in self._load_channel_sessions(channel_config)
+                        ):
+                            await self._import_codex_history(codex_thread_id)
+                        checkpoint[codex_thread_id] = fingerprint
+                        catalog_changed = True
+                    except Exception:
+                        LOG.exception(
+                            "failed to mirror Codex session %s", codex_thread_id
+                        )
+                next_cursor = result.get("nextCursor")
+                if initialized or not isinstance(next_cursor, str) or not next_cursor:
+                    break
+                cursor = next_cursor
+            if state_path is not None:
+                state_path.parent.mkdir(parents=True, exist_ok=True)
+                await asyncio.to_thread(
+                    _write_json,
+                    state_path,
+                    {"initialized": True, "sessions": checkpoint},
+                )
+                if catalog_changed:
+                    for channel_config in self._always_on_projects.values():
+                        self._schedule_directory_index(channel_config)
 
     async def _link_started_codex_thread(self, value: dict[str, object]) -> None:
         codex_thread_id = str(value.get("id") or "")
@@ -1199,14 +1537,14 @@ class PamDiscord(discord.Client):
         channel_config = self._workspace_config_for_cwd(cwd)
         if channel_config is None:
             return
-        sessions = load_shared_sessions(channel_config.workspace)
+        sessions = self._load_channel_sessions(channel_config)
         if codex_thread_id in sessions:
             await self._ensure_authorized_thread_members(sessions[codex_thread_id])
             return
         originating_thread = await self._originating_discord_thread(codex_thread_id)
         if originating_thread is not None:
             sessions[codex_thread_id] = originating_thread.id
-            save_shared_sessions(channel_config.workspace, sessions)
+            self._save_channel_sessions(channel_config, sessions)
             if channel_config.project_record_dir is not None:
                 metadata_path = (
                     channel_config.project_record_dir
@@ -1219,23 +1557,44 @@ class PamDiscord(discord.Client):
                     _write_json(metadata_path, metadata)
             await self._ensure_authorized_thread_members(originating_thread.id)
             return
-        parent = await self._conversation_parent_channel(channel_config, cwd)
-        if not isinstance(parent, discord.TextChannel):
+        forum = await self._always_on_forum(channel_config)
+        parent: discord.TextChannel | discord.ForumChannel | None = forum
+        if parent is None:
+            parent = await self._conversation_parent_channel(channel_config, cwd)
+        if not isinstance(parent, (discord.TextChannel, discord.ForumChannel)):
             LOG.warning("no default Discord channel for Codex thread %s", codex_thread_id)
             return
         preview = str(value.get("name") or value.get("preview") or "").strip()
-        title = re.sub(r"\s+", " ", preview)[:80] or f"Codex {codex_thread_id[:8]}"
-        discord_thread = await parent.create_thread(
-            name=title,
-            auto_archive_duration=1440,
-            type=discord.ChannelType.public_thread,
+        relative = (
+            "root"
+            if cwd == channel_config.workspace
+            else str(cwd.relative_to(channel_config.workspace))
         )
+        title_text = re.sub(r"\s+", " ", preview) or f"Codex {codex_thread_id[:8]}"
+        title = f"[{relative}] {title_text}"[:80]
+        if isinstance(parent, discord.ForumChannel):
+            created = await parent.create_thread(
+                name=title,
+                auto_archive_duration=1440,
+                content=(
+                    "**pam** · Shared terminal and Discord Codex session connected.\n"
+                    f"**Project:** `{channel_config.workspace}`\n"
+                    f"**Working directory:** `{cwd}`"
+                ),
+            )
+            discord_thread = created.thread
+        else:
+            discord_thread = await parent.create_thread(
+                name=title,
+                auto_archive_duration=1440,
+                type=discord.ChannelType.public_thread,
+            )
         await self._add_authorized_thread_members(
             discord_thread,
             parent.guild,
         )
         sessions[codex_thread_id] = discord_thread.id
-        save_shared_sessions(channel_config.workspace, sessions)
+        self._save_channel_sessions(channel_config, sessions)
         if channel_config.project_record_dir is not None:
             conversation_dir = channel_config.project_record_dir / str(discord_thread.id)
             conversation_dir.mkdir(parents=True, exist_ok=True)
@@ -1247,12 +1606,17 @@ class PamDiscord(discord.Client):
                     "discord_parent_channel_id": parent.id,
                     "workspace": str(cwd),
                     "project_root": str(channel_config.workspace),
+                    "title": title,
                     "created_at": datetime.now(UTC).isoformat(),
                     "source": "terminal",
                 },
             )
-        await discord_thread.send("**pam** · Shared terminal and Discord Codex session connected.")
+        if not isinstance(parent, discord.ForumChannel):
+            await discord_thread.send(
+                "**pam** · Shared terminal and Discord Codex session connected."
+            )
         await self._import_codex_history(codex_thread_id)
+        self._schedule_directory_index(channel_config)
         if not str(value.get("name") or "").strip() and preview:
             asyncio.create_task(
                 self._name_terminal_started_session(
@@ -1420,8 +1784,10 @@ class PamDiscord(discord.Client):
         item = params.get("item")
         if not codex_thread_id or not isinstance(item, dict):
             return
-        for channel_config in self.config.guilds.values():
-            discord_thread_id = load_shared_sessions(channel_config.workspace).get(codex_thread_id)
+        for channel_config in self._all_channel_configs():
+            discord_thread_id = self._load_channel_sessions(channel_config).get(
+                codex_thread_id
+            )
             if discord_thread_id is None:
                 continue
             record_dir = channel_config.project_record_dir
