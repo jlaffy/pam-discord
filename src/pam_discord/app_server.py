@@ -48,6 +48,10 @@ class CodexAppServer:
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
+            # `thread/read(includeTurns=true)` returns one JSONL record containing the
+            # complete conversation. Real histories routinely exceed asyncio's 64 KiB
+            # default StreamReader limit.
+            limit=64 * 1024 * 1024,
         )
         self._reader = asyncio.create_task(self._read_loop(self._process))
         self._stderr_reader = asyncio.create_task(self._drain_stderr(self._process))

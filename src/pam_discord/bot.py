@@ -1541,7 +1541,11 @@ class PamDiscord(discord.Client):
         if codex_thread_id in sessions:
             await self._ensure_authorized_thread_members(sessions[codex_thread_id])
             return
-        originating_thread = await self._originating_discord_thread(codex_thread_id)
+        originating_thread = (
+            None
+            if channel_config.session_state_dir is not None
+            else await self._originating_discord_thread(codex_thread_id)
+        )
         if originating_thread is not None:
             sessions[codex_thread_id] = originating_thread.id
             self._save_channel_sessions(channel_config, sessions)
