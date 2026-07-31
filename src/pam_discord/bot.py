@@ -1444,6 +1444,15 @@ class PamDiscord(discord.Client):
             )
             checkpoint: dict[str, str] = {}
             initialized = False
+            catalog_scope = "|".join(
+                sorted(
+                    str(path)
+                    for path in (
+                        *self.config.project_roots,
+                        *self.config.always_on_excluded_roots,
+                    )
+                )
+            )
             if state_path is not None and state_path.exists():
                 try:
                     raw_state = await asyncio.to_thread(
@@ -1454,7 +1463,9 @@ class PamDiscord(discord.Client):
                         str(key): str(value)
                         for key, value in dict(state.get("sessions", {})).items()
                     }
-                    initialized = bool(state.get("initialized"))
+                    initialized = bool(state.get("initialized")) and str(
+                        state.get("scope") or ""
+                    ) == catalog_scope
                 except (OSError, ValueError, json.JSONDecodeError):
                     LOG.warning("ignoring invalid catalog checkpoint %s", state_path)
 
@@ -1517,7 +1528,11 @@ class PamDiscord(discord.Client):
                 await asyncio.to_thread(
                     _write_json,
                     state_path,
-                    {"initialized": True, "sessions": checkpoint},
+                    {
+                        "initialized": True,
+                        "scope": catalog_scope,
+                        "sessions": checkpoint,
+                    },
                 )
                 if catalog_changed:
                     for channel_config in self._always_on_projects.values():
