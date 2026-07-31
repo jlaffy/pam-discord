@@ -358,10 +358,7 @@ class PamDiscord(discord.Client):
 
     def _detect_project_root(self, cwd: Path) -> Path | None:
         cwd = cwd.resolve()
-        if any(
-            cwd == root or cwd.is_relative_to(root)
-            for root in self.config.always_on_excluded_roots
-        ):
+        if self._always_on_excludes(cwd):
             return None
         roots = sorted(
             _allowed_project_roots(self.config),
@@ -385,6 +382,13 @@ class PamDiscord(discord.Client):
             return approved
         relative = cwd.relative_to(approved)
         return approved / relative.parts[0]
+
+    def _always_on_excludes(self, cwd: Path) -> bool:
+        cwd = cwd.resolve()
+        return any(
+            cwd == root or cwd.is_relative_to(root)
+            for root in self.config.always_on_excluded_roots
+        )
 
     def _always_on_project_config(self, cwd: Path) -> ChannelConfig | None:
         if self.config.always_on_guild_id is None or self.config.always_on_state_dir is None:
@@ -1154,6 +1158,8 @@ class PamDiscord(discord.Client):
             raise
 
     def _workspace_config_for_cwd(self, cwd: Path) -> ChannelConfig | None:
+        if self._always_on_excludes(cwd):
+            return None
         discovered = self._always_on_project_config(cwd)
         matches = [
             item

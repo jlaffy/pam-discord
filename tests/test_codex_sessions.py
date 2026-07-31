@@ -161,6 +161,10 @@ def test_always_on_config_excludes_production_owned_projects(tmp_path: Path) -> 
 
     bot = PamDiscord(load_config(config_path))
 
+    # A previously discovered broad root must not allow descendants to bypass
+    # the exclusion when the catalog is rescanned.
+    bot._always_on_project_config(root)
+
     assert bot._workspace_config_for_cwd(excluded) is None
     assert bot._workspace_config_for_cwd(excluded / "results") is None
     assert bot._workspace_config_for_cwd(candidate) is not None
