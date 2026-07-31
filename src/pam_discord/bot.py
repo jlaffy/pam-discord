@@ -1953,7 +1953,9 @@ def main(argv: list[str] | None = None) -> None:
         help="Private dotenv file containing DISCORD_BOT_TOKEN",
     )
     args = parser.parse_args(argv)
-    load_dotenv(args.env_file)
+    # An explicit Pam instance must use its own token even when the service manager
+    # inherited another Pam instance's environment.
+    load_dotenv(args.env_file, override=True)
     token = os.environ.get("DISCORD_BOT_TOKEN")
     if not token:
         raise SystemExit("DISCORD_BOT_TOKEN is missing; create a local .env from .env.example")
