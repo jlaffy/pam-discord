@@ -17,6 +17,7 @@ codex_app_server_url = "stdio://"
 # [always_on]
 # guild_id = 456789012345678901
 # approved_roots = ["/absolute/path/to/projects"]
+# excluded_roots = ["/absolute/path/to/projects/already-owned-by-another-pam"]
 # state_dir = "./always-on-state"
 
 [guilds."234567890123456789"]

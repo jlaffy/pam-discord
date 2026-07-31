@@ -133,6 +133,39 @@ def test_always_on_config_discovers_git_project_without_channel_mappings(
     assert discovered.session_state_dir != project
 
 
+def test_always_on_config_excludes_production_owned_projects(tmp_path: Path) -> None:
+    root = tmp_path / "projects"
+    excluded = root / "production-project"
+    candidate = root / "lab-project"
+    excluded.mkdir(parents=True)
+    candidate.mkdir()
+    (excluded / ".git").mkdir()
+    (candidate / ".git").mkdir()
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'archive_dir = "{tmp_path / "archive"}"',
+                "allowed_user_ids = [1]",
+                "",
+                "[always_on]",
+                "guild_id = 99",
+                f'approved_roots = ["{root}"]',
+                f'excluded_roots = ["{excluded}"]',
+                f'state_dir = "{tmp_path / "canary"}"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    bot = PamDiscord(load_config(config_path))
+
+    assert bot._workspace_config_for_cwd(excluded) is None
+    assert bot._workspace_config_for_cwd(excluded / "results") is None
+    assert bot._workspace_config_for_cwd(candidate) is not None
+
+
 def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     tmp_path: Path,
 ) -> None:

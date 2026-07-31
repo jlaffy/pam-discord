@@ -358,6 +358,11 @@ class PamDiscord(discord.Client):
 
     def _detect_project_root(self, cwd: Path) -> Path | None:
         cwd = cwd.resolve()
+        if any(
+            cwd == root or cwd.is_relative_to(root)
+            for root in self.config.always_on_excluded_roots
+        ):
+            return None
         roots = sorted(
             _allowed_project_roots(self.config),
             key=lambda item: len(item.parts),
