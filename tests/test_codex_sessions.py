@@ -273,6 +273,10 @@ def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     assert "Plan analysis" in recent
     assert str(project) in recent
     assert "`root`" in recent
+    assert recent.index(str(project)) < recent.index("Plan analysis")
+    assert "age <t:" in recent
+    assert "active <t:" in recent
+    assert "tokens" in recent
 
     old = records / "103"
     old.mkdir()

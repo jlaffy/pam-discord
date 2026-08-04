@@ -601,7 +601,9 @@ class PamDiscord(discord.Client):
             LOG.exception("failed to update recent sessions")
 
     def _recent_sessions_text(self) -> str:
-        sessions: list[tuple[float, str, int, str, str, int | None, str]] = []
+        sessions: list[
+            tuple[float, float, str, int, str, str, int | None, str]
+        ] = []
         for channel_config in self._always_on_projects.values():
             records = channel_config.project_record_dir
             if records is None or not records.exists():
@@ -613,6 +615,9 @@ class PamDiscord(discord.Client):
                     codex_id = str(metadata.get("codex_thread_id") or "")
                     updated = _timestamp_value(
                         metadata.get("codex_updated_at") or metadata.get("created_at")
+                    )
+                    created = _timestamp_value(
+                        metadata.get("codex_created_at") or metadata.get("created_at")
                     )
                     title = str(metadata.get("title") or f"Session {thread_id}")
                     title = re.sub(
@@ -634,6 +639,7 @@ class PamDiscord(discord.Client):
                 sessions.append(
                     (
                         updated,
+                        created,
                         title,
                         thread_id,
                         str(channel_config.workspace),
@@ -649,15 +655,16 @@ class PamDiscord(discord.Client):
             "Newest first by Codex last-active time. Links open the existing Forum posts.",
             "",
         ]
-        for updated, title, thread_id, root, relative, tokens, status in sessions[
+        for updated, created, title, thread_id, root, relative, tokens, status in sessions[
             : self.config.always_on_recent_sessions_limit
         ]:
             token_text = _compact_count(tokens) if tokens is not None else "—"
             lines.extend(
                 (
-                    f"**{status}** · <t:{int(updated)}:R> · {token_text} tokens",
+                    f"📁 `{root}` → `{relative}`",
+                    f"age <t:{int(created)}:R> · active <t:{int(updated)}:R> · "
+                    f"**{status}** · {token_text} tokens",
                     f"[{title}](https://discord.com/channels/{guild_id}/{thread_id})",
-                    f"`{root}` · `{relative}`",
                     "",
                 )
             )
