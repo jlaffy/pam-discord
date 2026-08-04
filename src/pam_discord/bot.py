@@ -659,15 +659,20 @@ class PamDiscord(discord.Client):
         for updated, created, title, thread_id, root, relative, tokens, status in sessions[
             : self.config.always_on_recent_sessions_limit
         ]:
-            token_text = _compact_count(tokens) if tokens is not None else "—"
             created = min(created, now)
             updated = min(updated, now)
+            location = Path(root) if relative == "root" else Path(root) / relative
+            details = (
+                f"Started <t:{int(created)}:R> · Active <t:{int(updated)}:R> · "
+                f"{status.title()}"
+            )
+            if tokens is not None:
+                details += f" · {_compact_count(tokens)} tokens"
             lines.extend(
                 (
-                    f"📁 `{root}` → `{relative}`",
-                    f"started <t:{int(created)}:R> · last active <t:{int(updated)}:R> · "
-                    f"**{status}** · {token_text} tokens",
-                    f"[{title}](https://discord.com/channels/{guild_id}/{thread_id})",
+                    f"📁 {location}",
+                    details,
+                    f"↳ [{title}](https://discord.com/channels/{guild_id}/{thread_id})",
                     "",
                 )
             )

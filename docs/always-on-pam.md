@@ -41,9 +41,10 @@ Discord server: Pam Lab
   token totals. `always_on.index_sessions_per_directory` controls how many recent sessions each
   section displays; older Forum posts remain searchable and are not deleted.
 - `#recent-sessions` is a pinned, Pam-maintained dashboard placed at the top of the server. It is
-  sorted by Codex `updatedAt`. Each entry leads with project root and relative working directory,
-  then shows when the session started, last activity, status, token total, and the Codex-native
-  linked title. Future-skewed timestamps are clamped to the current time for natural wording.
+  sorted by Codex `updatedAt`. Each entry uses a consistent plain-text layout led by its full
+  working-directory path, then shows when the session started, last activity, status, optional
+  token total, and the Codex-native linked title. Future-skewed timestamps are clamped to the
+  current time for natural wording.
   It never creates duplicate conversations.
 - Pam keeps the authorized user joined to at most three sessions per Forum that were active in
   the last seven days. These are sidebar shortcuts only; opening the Forum still shows its full
