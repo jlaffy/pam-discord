@@ -1686,6 +1686,7 @@ class PamDiscord(discord.Client):
                         await self._normalize_existing_session_title(
                             value, channel_config
                         )
+                        self._schedule_directory_index(channel_config)
                     if initialized and checkpoint.get(codex_thread_id) == fingerprint:
                         continue
                     try:
