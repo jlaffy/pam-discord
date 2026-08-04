@@ -354,6 +354,7 @@ class PamDiscord(discord.Client):
         self._always_on_projects: dict[Path, ChannelConfig] = {}
         self._always_on_lock = asyncio.Lock()
         self._index_update_tasks: dict[Path, asyncio.Task[None]] = {}
+        self._recent_sessions_task: asyncio.Task[None] | None = None
         self._catalog_sync_lock = asyncio.Lock()
         self._discord_session_starts: dict[Path, int] = {}
 
@@ -372,6 +373,8 @@ class PamDiscord(discord.Client):
         )
         for task in self._index_update_tasks.values():
             task.cancel()
+        if self._recent_sessions_task is not None:
+            self._recent_sessions_task.cancel()
         await self._app_server.close()
         await super().close()
 
@@ -556,6 +559,126 @@ class PamDiscord(discord.Client):
         self._index_update_tasks[channel_config.workspace] = asyncio.create_task(
             self._update_directory_index_after_delay(channel_config)
         )
+        self._schedule_recent_sessions()
+
+    def _schedule_recent_sessions(self) -> None:
+        if self.config.always_on_state_dir is None:
+            return
+        if self._recent_sessions_task is not None and not self._recent_sessions_task.done():
+            self._recent_sessions_task.cancel()
+        self._recent_sessions_task = asyncio.create_task(
+            self._update_recent_sessions_after_delay()
+        )
+
+    async def _update_recent_sessions_after_delay(self) -> None:
+        try:
+            await asyncio.sleep(2)
+            await self._update_recent_sessions()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            LOG.exception("failed to update recent sessions")
+
+    def _recent_sessions_text(self) -> str:
+        sessions: list[tuple[float, str, int, str, str, int | None, str]] = []
+        for channel_config in self._always_on_projects.values():
+            records = channel_config.project_record_dir
+            if records is None or not records.exists():
+                continue
+            for metadata_path in records.glob("*/metadata.json"):
+                try:
+                    metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                    thread_id = int(metadata["discord_thread_id"])
+                    codex_id = str(metadata.get("codex_thread_id") or "")
+                    updated = _timestamp_value(
+                        metadata.get("codex_updated_at") or metadata.get("created_at")
+                    )
+                    title = str(metadata.get("title") or f"Session {thread_id}")
+                    title = re.sub(
+                        r"^[A-Z][a-z]{2} \d{1,2}(?:, \d{4})? · ", "", title
+                    )
+                    title = re.sub(r"^\[(?:root|[^]]+)\]\s*", "", title).strip()
+                    cwd = Path(str(metadata.get("workspace") or channel_config.workspace))
+                    relative = (
+                        "root"
+                        if cwd == channel_config.workspace
+                        else str(cwd.relative_to(channel_config.workspace))
+                    )
+                    tokens = _latest_session_tokens(
+                        metadata_path.parent / "codex-events.jsonl"
+                    )
+                    status = "RUNNING" if codex_id in self._turn_typing else "IDLE"
+                except (KeyError, OSError, ValueError, json.JSONDecodeError):
+                    continue
+                sessions.append(
+                    (
+                        updated,
+                        title,
+                        thread_id,
+                        str(channel_config.workspace),
+                        relative,
+                        tokens,
+                        status,
+                    )
+                )
+        sessions.sort(key=lambda item: item[0], reverse=True)
+        guild_id = self.config.always_on_guild_id
+        lines = [
+            "**Pam recent sessions**",
+            "Newest first by Codex last-active time. Links open the existing Forum posts.",
+            "",
+        ]
+        for updated, title, thread_id, root, relative, tokens, status in sessions[
+            : self.config.always_on_recent_sessions_limit
+        ]:
+            token_text = _compact_count(tokens) if tokens is not None else "—"
+            lines.extend(
+                (
+                    f"**{status}** · <t:{int(updated)}:R> · {token_text} tokens",
+                    f"[{title}](https://discord.com/channels/{guild_id}/{thread_id})",
+                    f"`{root}` · `{relative}`",
+                    "",
+                )
+            )
+        if not sessions:
+            lines.append("No sessions discovered yet.")
+        return "\n".join(lines)[:1950]
+
+    async def _update_recent_sessions(self) -> None:
+        guild_id = self.config.always_on_guild_id
+        state_dir = self.config.always_on_state_dir
+        if guild_id is None or state_dir is None:
+            return
+        guild = self.get_guild(guild_id)
+        if guild is None:
+            return
+        channel = discord.utils.get(guild.text_channels, name="recent-sessions")
+        if channel is None:
+            channel = await guild.create_text_channel(
+                "recent-sessions", reason="Pam Codex recency dashboard"
+            )
+            await channel.edit(position=0, reason="Keep Pam navigation at the top")
+        text = await asyncio.to_thread(self._recent_sessions_text)
+        state_path = state_dir / "recent-sessions.json"
+        state = (
+            json.loads(state_path.read_text(encoding="utf-8"))
+            if state_path.exists()
+            else {}
+        )
+        message_id = state.get("message_id")
+        if isinstance(message_id, int):
+            try:
+                message = await channel.fetch_message(message_id)
+                await message.edit(content=text)
+                return
+            except discord.HTTPException:
+                pass
+        message = await channel.send(text)
+        try:
+            await message.pin(reason="Pam recent sessions dashboard")
+        except discord.HTTPException:
+            pass
+        _write_json(state_path, {"channel_id": channel.id, "message_id": message.id})
 
     async def _update_directory_index_after_delay(
         self, channel_config: ChannelConfig

@@ -22,6 +22,7 @@ is required.
 
 ```text
 Discord server: Pam Lab
+  Text channel: #recent-sessions cross-project Codex recency dashboard
   Forum channel: one per discovered project
     Forum post/thread: one per Codex session
     Pinned directory index: virtual tree of directories that contain sessions
@@ -39,6 +40,9 @@ Discord server: Pam Lab
   activity and shows running/idle state, relative creation and activity times, and best-effort
   token totals. `always_on.index_sessions_per_directory` controls how many recent sessions each
   section displays; older Forum posts remain searchable and are not deleted.
+- `#recent-sessions` is a pinned, Pam-maintained dashboard placed at the top of the server. It is
+  sorted by Codex `updatedAt` and shows status, project root, relative working directory, token
+  total, and a link to each existing Forum post. It never creates duplicate conversations.
 
 ## Safety and rollout
 

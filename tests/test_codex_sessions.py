@@ -267,6 +267,13 @@ def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     assert "created <t:" in text
     assert "— tokens" in text
 
+    bot._always_on_projects[project] = channel
+    recent = bot._recent_sessions_text()
+    assert "Pam recent sessions" in recent
+    assert "Plan analysis" in recent
+    assert str(project) in recent
+    assert "`root`" in recent
+
 
 def test_always_on_catalog_checkpoint_skips_unchanged_sessions(
     tmp_path: Path,
