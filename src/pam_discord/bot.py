@@ -652,7 +652,8 @@ class PamDiscord(discord.Client):
             if hidden > 0:
                 body.append(f"• _{hidden} older session(s) remain searchable in this Forum_ ")
             body.append("")
-        return "\n".join(body)[:3900]
+        # Forum starter messages use Discord's regular 2,000-character limit.
+        return "\n".join(body)[:1950]
 
     async def _update_directory_index(self, channel_config: ChannelConfig) -> None:
         forum = await self._always_on_forum(channel_config)
