@@ -134,6 +134,37 @@ def test_always_on_config_discovers_git_project_without_channel_mappings(
     assert discovered.session_state_dir != project
 
 
+def test_approved_root_git_marker_does_not_absorb_first_level_projects(
+    tmp_path: Path,
+) -> None:
+    root = tmp_path / "projects"
+    project = root / "signal_peptide_diversity"
+    cwd = project / "results"
+    cwd.mkdir(parents=True)
+    (root / ".git").mkdir()
+    config_path = tmp_path / "config.toml"
+    config_path.write_text(
+        "\n".join(
+            [
+                f'archive_dir = "{tmp_path / "archive"}"',
+                "allowed_user_ids = [1]",
+                "",
+                "[always_on]",
+                "guild_id = 99",
+                f'approved_roots = ["{root}"]',
+                f'state_dir = "{tmp_path / "canary"}"',
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    discovered = PamDiscord(load_config(config_path))._workspace_config_for_cwd(cwd)
+
+    assert discovered is not None
+    assert discovered.workspace == project
+
+
 def test_always_on_config_excludes_production_owned_projects(tmp_path: Path) -> None:
     root = tmp_path / "projects"
     excluded = root / "production-project"

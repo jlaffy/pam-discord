@@ -373,11 +373,12 @@ class PamDiscord(discord.Client):
         if approved is None:
             return None
         candidate = cwd
-        while candidate != approved.parent:
+        # Search for a Git root below the approved discovery root. The approved
+        # root may itself be a bookkeeping repository (for example a user's
+        # entire projects directory); it must not absorb every non-Git child.
+        while candidate != approved:
             if (candidate / ".git").exists():
                 return candidate
-            if candidate == approved:
-                break
             candidate = candidate.parent
         if cwd == approved:
             return approved
