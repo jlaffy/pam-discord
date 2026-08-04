@@ -66,6 +66,7 @@ def test_discord_session_is_mapped_before_app_server_turn_starts(
     async def request(method: str, params: dict[str, object]) -> dict[str, object]:
         calls.append((method, params))
         if method == "thread/start":
+            assert bot._discord_session_starts[workspace.resolve()] == 1
             return {"thread": {"id": "codex-thread"}}
         assert load_shared_sessions(workspace) == {"codex-thread": 123}
         return {"turn": {"id": "turn-1", "status": "inProgress"}}

@@ -291,6 +291,7 @@ class PamDiscord(discord.Client):
         self._always_on_lock = asyncio.Lock()
         self._index_update_tasks: dict[Path, asyncio.Task[None]] = {}
         self._catalog_sync_lock = asyncio.Lock()
+        self._discord_session_starts: dict[Path, int] = {}
 
     async def setup_hook(self) -> None:
         self.config.archive_dir.mkdir(parents=True, exist_ok=True)
@@ -803,7 +804,7 @@ class PamDiscord(discord.Client):
         title = re.sub(r"\s+", " ", title).strip()[:80]
         thread = await message.create_thread(
             name=title or "agent-task",
-            auto_archive_duration=1440,
+            auto_archive_duration=10080,
         )
         await self._add_collaborators(thread, message)
         return thread
@@ -956,24 +957,37 @@ class PamDiscord(discord.Client):
         conversation_dir: Path,
         project_conversation_dir: Path | None,
     ) -> str:
-        result = await self._app_server.request(
-            "thread/start",
-            {
-                "cwd": str(channel_config.workspace),
-                "approvalPolicy": "never",
-                "serviceName": "pam_discord",
-            },
+        workspace = channel_config.workspace.resolve()
+        self._discord_session_starts[workspace] = (
+            self._discord_session_starts.get(workspace, 0) + 1
         )
-        value = result.get("thread") if isinstance(result, dict) else None
-        codex_thread_id = str(value.get("id") or "") if isinstance(value, dict) else ""
-        if not codex_thread_id:
-            raise RuntimeError("Codex app-server started a conversation without an ID")
+        try:
+            result = await self._app_server.request(
+                "thread/start",
+                {
+                    "cwd": str(channel_config.workspace),
+                    "approvalPolicy": "never",
+                    "serviceName": "pam_discord",
+                },
+            )
+            value = result.get("thread") if isinstance(result, dict) else None
+            codex_thread_id = (
+                str(value.get("id") or "") if isinstance(value, dict) else ""
+            )
+            if not codex_thread_id:
+                raise RuntimeError("Codex app-server started a conversation without an ID")
 
-        # Save the relationship before starting work. Notifications and the session
-        # catalog can now recognize that this conversation already has a Discord thread.
-        sessions = self._load_channel_sessions(channel_config)
-        sessions[codex_thread_id] = discord_thread.id
-        self._save_channel_sessions(channel_config, sessions)
+            # Save the relationship before letting discovery handle this workspace
+            # again. thread/started may arrive before thread/start returns.
+            sessions = self._load_channel_sessions(channel_config)
+            sessions[codex_thread_id] = discord_thread.id
+            self._save_channel_sessions(channel_config, sessions)
+        finally:
+            remaining = self._discord_session_starts.get(workspace, 1) - 1
+            if remaining:
+                self._discord_session_starts[workspace] = remaining
+            else:
+                self._discord_session_starts.pop(workspace, None)
         _write_json(
             conversation_dir / "state.json",
             {
@@ -1560,6 +1574,11 @@ class PamDiscord(discord.Client):
         if not codex_thread_id or not isinstance(cwd_value, str):
             return
         cwd = Path(cwd_value).resolve()
+        # A thread/started notification can beat the thread/start response. The
+        # Discord handler will persist the authoritative mapping as soon as that
+        # response arrives, so discovery must not create a competing Forum post.
+        if self._discord_session_starts.get(cwd, 0):
+            return
         channel_config = self._workspace_config_for_cwd(cwd)
         if channel_config is None:
             return
@@ -1605,7 +1624,7 @@ class PamDiscord(discord.Client):
         if isinstance(parent, discord.ForumChannel):
             created = await parent.create_thread(
                 name=title,
-                auto_archive_duration=1440,
+                auto_archive_duration=10080,
                 content=(
                     "**pam** · Shared terminal and Discord Codex session connected.\n"
                     f"**Project:** `{channel_config.workspace}`\n"
@@ -1616,7 +1635,7 @@ class PamDiscord(discord.Client):
         else:
             discord_thread = await parent.create_thread(
                 name=title,
-                auto_archive_duration=1440,
+                auto_archive_duration=10080,
                 type=discord.ChannelType.public_thread,
             )
         await self._add_authorized_thread_members(
