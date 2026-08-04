@@ -152,9 +152,17 @@ def _compact_count(value: int) -> str:
     return str(value)
 
 
-def _session_display_title(title: str, cwd: Path, project_root: Path) -> str:
+def _session_display_title(
+    title: str,
+    cwd: Path,
+    project_root: Path,
+    last_active: object | None = None,
+) -> str:
     """Decorate subdirectory sessions while leaving project-root titles clean."""
     cleaned = _clean_thread_title(title)
+    cleaned = re.sub(
+        r"^[A-Z][a-z]{2} \d{1,2}(?:, \d{4})? · ", "", cleaned
+    ).strip()
     try:
         relative = cwd.resolve().relative_to(project_root.resolve())
     except ValueError:
@@ -163,8 +171,15 @@ def _session_display_title(title: str, cwd: Path, project_root: Path) -> str:
     if existing and (existing.group(1) == "root" or existing.group(1) == str(relative)):
         cleaned = cleaned[existing.end() :].strip()
     if relative == Path("."):
-        return cleaned
-    return _clean_thread_title(f"[{relative}] {cleaned}")
+        displayed = cleaned
+    else:
+        displayed = _clean_thread_title(f"[{relative}] {cleaned}")
+    if last_active is None:
+        return displayed
+    active = datetime.fromtimestamp(_timestamp_value(last_active), UTC).astimezone()
+    now = datetime.now().astimezone()
+    date_text = active.strftime("%b %-d" if active.year == now.year else "%b %-d, %Y")
+    return _clean_thread_title(f"{date_text} · {displayed}")
 
 
 def _is_audio(attachment: discord.Attachment) -> bool:
@@ -334,7 +349,7 @@ class PamDiscord(discord.Client):
         self._linking_codex_threads: set[str] = set()
         self._last_catalog_sync = 0.0
         self._membership_synced_threads: set[int] = set()
-        self._title_synced_threads: set[int] = set()
+        self._title_synced_threads: dict[int, str] = {}
         self._turn_typing: dict[str, object] = {}
         self._always_on_projects: dict[Path, ChannelConfig] = {}
         self._always_on_lock = asyncio.Lock()
@@ -1295,7 +1310,9 @@ class PamDiscord(discord.Client):
                 cwd, project_root = await asyncio.to_thread(
                     self._session_title_context, codex_thread_id, discord_thread_id
                 )
-                title = _session_display_title(title, cwd, project_root)
+                title = _session_display_title(
+                    title, cwd, project_root, datetime.now(UTC).timestamp()
+                )
                 discord_thread = self.get_channel(discord_thread_id)
                 if not isinstance(discord_thread, discord.Thread):
                     try:
@@ -1573,6 +1590,10 @@ class PamDiscord(discord.Client):
                     if initialized and checkpoint.get(codex_thread_id) == fingerprint:
                         continue
                     try:
+                        if channel_config is not None:
+                            await self._normalize_existing_session_title(
+                                value, channel_config
+                            )
                         await self._link_started_codex_thread(value)
                         if (
                             initialized
@@ -1617,14 +1638,17 @@ class PamDiscord(discord.Client):
         cwd_value = value.get("cwd")
         if discord_thread_id is None or not isinstance(cwd_value, str):
             return
-        if discord_thread_id in self._title_synced_threads:
-            return
         semantic = str(value.get("name") or value.get("preview") or "").strip()
         if not semantic:
             return
         desired = _session_display_title(
-            semantic, Path(cwd_value), channel_config.workspace
+            semantic,
+            Path(cwd_value),
+            channel_config.workspace,
+            value.get("updatedAt", value.get("updated_at")),
         )
+        if self._title_synced_threads.get(discord_thread_id) == desired:
+            return
         thread = self.get_channel(discord_thread_id)
         if not isinstance(thread, discord.Thread):
             try:
@@ -1633,7 +1657,7 @@ class PamDiscord(discord.Client):
                 return
         if isinstance(thread, discord.Thread) and thread.name != desired:
             await self._edit_discord_thread_name(thread, desired)
-        self._title_synced_threads.add(discord_thread_id)
+        self._title_synced_threads[discord_thread_id] = desired
 
     async def _link_started_codex_thread(self, value: dict[str, object]) -> None:
         codex_thread_id = str(value.get("id") or "")
@@ -1692,7 +1716,12 @@ class PamDiscord(discord.Client):
             return
         preview = str(value.get("name") or value.get("preview") or "").strip()
         title_text = re.sub(r"\s+", " ", preview) or f"Codex {codex_thread_id[:8]}"
-        title = _session_display_title(title_text, cwd, channel_config.workspace)
+        title = _session_display_title(
+            title_text,
+            cwd,
+            channel_config.workspace,
+            value.get("updatedAt", value.get("updated_at")),
+        )
         if isinstance(parent, discord.ForumChannel):
             created = await parent.create_thread(
                 name=title,

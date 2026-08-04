@@ -53,6 +53,12 @@ def test_session_titles_omit_root_and_decorate_subdirectories(tmp_path: Path) ->
     assert _session_display_title("Analyze results", subdirectory, project) == (
         "[results/figures] Analyze results"
     )
+    assert _session_display_title(
+        "Analyze results", subdirectory, project, "2026-08-04T12:00:00Z"
+    ).endswith("Aug 4 · [results/figures] Analyze results")
+    assert _session_display_title(
+        "Aug 3 · Analyze results", project, project, "2026-08-04T12:00:00Z"
+    ).endswith("Aug 4 · Analyze results")
 
 
 def test_discord_session_is_mapped_before_app_server_turn_starts(
@@ -451,10 +457,11 @@ def test_native_codex_name_renames_mapped_discord_thread_in_place(
         )
     )
 
-    assert edits == ["Analyze HLA Signal Peptides"]
+    assert len(edits) == 1
+    assert edits[0].endswith("Aug 4 · Analyze HLA Signal Peptides")
     assert load_shared_sessions(workspace) == {"codex-thread": 123}
-    assert json.loads((metadata_dir / "metadata.json").read_text())["title"] == (
-        "Analyze HLA Signal Peptides"
+    assert json.loads((metadata_dir / "metadata.json").read_text())["title"].endswith(
+        "Aug 4 · Analyze HLA Signal Peptides"
     )
 
 
