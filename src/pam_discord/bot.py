@@ -118,6 +118,42 @@ def _clean_thread_title(value: str) -> str:
     return title[:80].rstrip()
 
 
+def _timestamp_value(value: object) -> float:
+    if isinstance(value, (int, float)):
+        # Codex app-server timestamps are milliseconds; Discord timestamps are seconds.
+        return float(value) / 1000 if float(value) > 10_000_000_000 else float(value)
+    if isinstance(value, str) and value:
+        try:
+            return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp()
+        except ValueError:
+            pass
+    return datetime.now(UTC).timestamp()
+
+
+def _latest_session_tokens(path: Path) -> int | None:
+    if not path.exists():
+        return None
+    latest: int | None = None
+    try:
+        for line in path.read_text(encoding="utf-8").splitlines():
+            value = json.loads(line)
+            usage = value.get("params", {}).get("tokenUsage", {})
+            total = usage.get("total", {}).get("totalTokens")
+            if isinstance(total, int):
+                latest = total
+    except (OSError, json.JSONDecodeError):
+        return latest
+    return latest
+
+
+def _compact_count(value: int) -> str:
+    if value >= 1_000_000:
+        return f"{value / 1_000_000:.1f}M"
+    if value >= 1_000:
+        return f"{value / 1_000:.1f}k"
+    return str(value)
+
+
 def _session_display_title(title: str, cwd: Path, project_root: Path) -> str:
     """Decorate subdirectory sessions while leaving project-root titles clean."""
     cleaned = _clean_thread_title(title)
@@ -499,8 +535,16 @@ class PamDiscord(discord.Client):
                 forum = await guild.create_forum(
                     name,
                     topic=topic,
+                    default_sort_order=discord.ForumOrderType.latest_activity,
                     reason="Pam always-on project discovery",
                 )
+            elif forum.default_sort_order != discord.ForumOrderType.latest_activity:
+                edited = await forum.edit(
+                    default_sort_order=discord.ForumOrderType.latest_activity,
+                    reason="Pam Forums use latest activity ordering",
+                )
+                if isinstance(edited, discord.ForumChannel):
+                    forum = edited
             self.config.channels[forum.id] = channel_config
             return forum
 
@@ -527,7 +571,7 @@ class PamDiscord(discord.Client):
 
     def _directory_index_text(self, channel_config: ChannelConfig) -> str:
         records = channel_config.project_record_dir
-        grouped: dict[str, list[tuple[str, int]]] = {}
+        grouped: dict[str, list[tuple[str, int, float, float, int | None, str]]] = {}
         if records is not None and records.exists():
             for metadata_path in records.glob("*/metadata.json"):
                 try:
@@ -540,9 +584,20 @@ class PamDiscord(discord.Client):
                     )
                     thread_id = int(metadata["discord_thread_id"])
                     title = str(metadata.get("title") or f"Session {thread_id}")
+                    created = _timestamp_value(
+                        metadata.get("codex_created_at") or metadata.get("created_at")
+                    )
+                    updated = _timestamp_value(
+                        metadata.get("codex_updated_at") or metadata.get("created_at")
+                    )
+                    tokens = _latest_session_tokens(metadata_path.parent / "codex-events.jsonl")
+                    codex_id = str(metadata.get("codex_thread_id") or "")
+                    status = "running" if codex_id in self._turn_typing else "idle"
                 except (KeyError, OSError, ValueError, json.JSONDecodeError):
                     continue
-                grouped.setdefault(relative, []).append((title, thread_id))
+                grouped.setdefault(relative, []).append(
+                    (title, thread_id, created, updated, tokens, status)
+                )
 
         tree: dict[str, object] = {}
         counts: dict[tuple[str, ...], int] = {}
@@ -582,12 +637,20 @@ class PamDiscord(discord.Client):
             "",
         ]
         guild_id = self.config.always_on_guild_id
+        limit = self.config.always_on_index_sessions_per_directory
         for relative, sessions in sorted(grouped.items()):
             body.append(f"**`{relative}`**")
-            for title, thread_id in sessions[-5:]:
+            sessions.sort(key=lambda item: item[3], reverse=True)
+            for title, thread_id, created, updated, tokens, status in sessions[:limit]:
+                token_text = _compact_count(tokens) if tokens is not None else "—"
                 body.append(
-                    f"• [{title}](https://discord.com/channels/{guild_id}/{thread_id})"
+                    f"• [{title}](https://discord.com/channels/{guild_id}/{thread_id}) · "
+                    f"**{status}** · active <t:{int(updated)}:R> · "
+                    f"created <t:{int(created)}:R> · {token_text} tokens"
                 )
+            hidden = len(sessions) - limit
+            if hidden > 0:
+                body.append(f"• _{hidden} older session(s) remain searchable in this Forum_ ")
             body.append("")
         return "\n".join(body)[:3900]
 
@@ -1390,11 +1453,19 @@ class PamDiscord(discord.Client):
         typing = thread.typing()
         await typing.__aenter__()
         self._turn_typing[codex_thread_id] = typing
+        self._schedule_session_index(codex_thread_id)
 
     async def _stop_turn_typing(self, codex_thread_id: str) -> None:
         typing = self._turn_typing.pop(codex_thread_id, None)
         if typing is not None:
             await typing.__aexit__(None, None, None)  # type: ignore[attr-defined]
+            self._schedule_session_index(codex_thread_id)
+
+    def _schedule_session_index(self, codex_thread_id: str) -> None:
+        for channel_config in self._all_channel_configs():
+            if codex_thread_id in self._load_channel_sessions(channel_config):
+                self._schedule_directory_index(channel_config)
+                return
 
     def _discord_thread_for_codex(self, codex_thread_id: str) -> int | None:
         for channel_config in self._all_channel_configs():
@@ -1577,6 +1648,30 @@ class PamDiscord(discord.Client):
                     channel_config = self._workspace_config_for_cwd(
                         Path(str(value.get("cwd") or "")).resolve()
                     )
+                    if (
+                        channel_config is not None
+                        and channel_config.project_record_dir is not None
+                    ):
+                        discord_id = self._load_channel_sessions(channel_config).get(
+                            codex_thread_id
+                        )
+                        if discord_id is not None:
+                            metadata_path = (
+                                channel_config.project_record_dir
+                                / str(discord_id)
+                                / "metadata.json"
+                            )
+                            if metadata_path.exists():
+                                metadata = json.loads(
+                                    metadata_path.read_text(encoding="utf-8")
+                                )
+                                metadata["codex_created_at"] = value.get(
+                                    "createdAt", value.get("created_at")
+                                )
+                                metadata["codex_updated_at"] = value.get(
+                                    "updatedAt", value.get("updated_at")
+                                )
+                                _write_json(metadata_path, metadata)
                     if (
                         channel_config is not None
                         and channel_config.session_state_dir is not None

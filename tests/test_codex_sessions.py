@@ -260,6 +260,10 @@ def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     assert "Plan analysis" in text
     assert "Review VEGFA peaks" in text
     assert "https://discord.com/channels/99/102" in text
+    assert "**idle**" in text
+    assert "active <t:" in text
+    assert "created <t:" in text
+    assert "— tokens" in text
 
 
 def test_always_on_catalog_checkpoint_skips_unchanged_sessions(

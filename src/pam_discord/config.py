@@ -37,6 +37,7 @@ class Config:
     always_on_guild_id: int | None = None
     always_on_state_dir: Path | None = None
     always_on_excluded_roots: tuple[Path, ...] = ()
+    always_on_index_sessions_per_directory: int = 10
 
 
 def load_config(path: Path) -> Config:
@@ -97,6 +98,7 @@ def load_config(path: Path) -> Config:
     always_on_state_dir = None
     always_on_roots: tuple[Path, ...] = ()
     always_on_excluded_roots: tuple[Path, ...] = ()
+    always_on_index_sessions_per_directory = 10
     if isinstance(always_on, dict) and always_on.get("guild_id"):
         always_on_guild_id = int(always_on["guild_id"])
         always_on_state_dir = Path(
@@ -115,6 +117,11 @@ def load_config(path: Path) -> Config:
             Path(str(value)).expanduser().resolve()
             for value in always_on.get("excluded_roots", [])
         )
+        always_on_index_sessions_per_directory = int(
+            always_on.get("index_sessions_per_directory", 10)
+        )
+        if not 1 <= always_on_index_sessions_per_directory <= 50:
+            raise ValueError("always_on index_sessions_per_directory must be 1-50")
     if not channels and not guilds and always_on_guild_id is None:
         raise ValueError("at least one Discord server or channel mapping is required")
     project_roots: tuple[Path, ...] = ()
@@ -157,4 +164,5 @@ def load_config(path: Path) -> Config:
         always_on_guild_id=always_on_guild_id,
         always_on_state_dir=always_on_state_dir,
         always_on_excluded_roots=always_on_excluded_roots,
+        always_on_index_sessions_per_directory=always_on_index_sessions_per_directory,
     )

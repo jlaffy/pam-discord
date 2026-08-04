@@ -32,6 +32,10 @@ Discord server: Pam Lab
 - A session's relative working directory is shown in its post title and project directory index.
 - Directory indexes are event-driven, debounced, and periodically reconciled from lightweight
   metadata. They never block conversation mirroring.
+- Forums default to latest-activity ordering. Each directory-index section also sorts by latest
+  activity and shows running/idle state, relative creation and activity times, and best-effort
+  token totals. `always_on.index_sessions_per_directory` controls how many recent sessions each
+  section displays; older Forum posts remain searchable and are not deleted.
 
 ## Safety and rollout
 
