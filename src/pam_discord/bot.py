@@ -355,6 +355,7 @@ class PamDiscord(discord.Client):
         self._always_on_lock = asyncio.Lock()
         self._index_update_tasks: dict[Path, asyncio.Task[None]] = {}
         self._recent_sessions_task: asyncio.Task[None] | None = None
+        self._sidebar_membership_targets: dict[Path, tuple[int, ...]] = {}
         self._catalog_sync_lock = asyncio.Lock()
         self._discord_session_starts: dict[Path, int] = {}
 
@@ -643,6 +644,76 @@ class PamDiscord(discord.Client):
         if not sessions:
             lines.append("No sessions discovered yet.")
         return "\n".join(lines)[:1950]
+
+    def _sidebar_session_ids(self, channel_config: ChannelConfig) -> tuple[int, ...]:
+        records = channel_config.project_record_dir
+        ranked: list[tuple[float, int]] = []
+        cutoff = datetime.now(UTC).timestamp() - (
+            self.config.always_on_sidebar_session_max_age_days * 86400
+        )
+        if records is None or not records.exists():
+            return ()
+        for metadata_path in records.glob("*/metadata.json"):
+            try:
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                updated = _timestamp_value(
+                    metadata.get("codex_updated_at") or metadata.get("created_at")
+                )
+                if updated < cutoff:
+                    continue
+                ranked.append((updated, int(metadata["discord_thread_id"])))
+            except (KeyError, OSError, ValueError, json.JSONDecodeError):
+                continue
+        ranked.sort(reverse=True)
+        return tuple(
+            thread_id
+            for _updated, thread_id in ranked[
+                : self.config.always_on_sidebar_sessions_per_forum
+            ]
+        )
+
+    async def _reconcile_sidebar_memberships(
+        self, channel_config: ChannelConfig
+    ) -> None:
+        desired = self._sidebar_session_ids(channel_config)
+        if self._sidebar_membership_targets.get(channel_config.workspace) == desired:
+            return
+        self._sidebar_membership_targets[channel_config.workspace] = desired
+        desired_set = set(desired)
+        guild_id = self.config.always_on_guild_id
+        guild = self.get_guild(guild_id) if guild_id is not None else None
+        if guild is None:
+            return
+        members = []
+        for user_id in self.config.allowed_user_ids:
+            try:
+                members.append(guild.get_member(user_id) or await guild.fetch_member(user_id))
+            except discord.HTTPException:
+                LOG.warning("could not fetch authorized user %s", user_id)
+        for thread_id in self._load_channel_sessions(channel_config).values():
+            thread = self.get_channel(thread_id)
+            if not isinstance(thread, discord.Thread):
+                try:
+                    thread = await self.fetch_channel(thread_id)
+                except discord.HTTPException:
+                    continue
+            if not isinstance(thread, discord.Thread) or thread.archived:
+                continue
+            for member in members:
+                try:
+                    if thread_id in desired_set:
+                        await thread.add_user(member)
+                    else:
+                        await thread.remove_user(member)
+                except discord.Forbidden:
+                    LOG.warning(
+                        "Manage Threads is required to trim Forum %s to %d sidebar sessions",
+                        channel_config.workspace,
+                        self.config.always_on_sidebar_sessions_per_forum,
+                    )
+                    return
+                except (discord.HTTPException, discord.NotFound):
+                    continue
 
     async def _update_recent_sessions(self) -> None:
         guild_id = self.config.always_on_guild_id
@@ -1749,6 +1820,8 @@ class PamDiscord(discord.Client):
                 if catalog_changed:
                     for channel_config in self._always_on_projects.values():
                         self._schedule_directory_index(channel_config)
+            for channel_config in self._always_on_projects.values():
+                await self._reconcile_sidebar_memberships(channel_config)
 
     async def _normalize_existing_session_title(
         self, value: dict[str, object], channel_config: ChannelConfig
@@ -1807,7 +1880,8 @@ class PamDiscord(discord.Client):
             return
         sessions = self._load_channel_sessions(channel_config)
         if codex_thread_id in sessions:
-            await self._ensure_authorized_thread_members(sessions[codex_thread_id])
+            if channel_config.session_state_dir is None:
+                await self._ensure_authorized_thread_members(sessions[codex_thread_id])
             return
         originating_thread = (
             None

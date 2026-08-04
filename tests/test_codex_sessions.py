@@ -274,6 +274,23 @@ def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     assert str(project) in recent
     assert "`root`" in recent
 
+    old = records / "103"
+    old.mkdir()
+    (old / "metadata.json").write_text(
+        json.dumps(
+            {
+                "discord_thread_id": 103,
+                "workspace": str(project),
+                "title": "Old session",
+                "codex_updated_at": "2020-01-01T00:00:00Z",
+            }
+        )
+        + "\n"
+    )
+    sidebar_ids = bot._sidebar_session_ids(channel)
+    assert len(sidebar_ids) == 2
+    assert set(sidebar_ids) == {101, 102}
+
 
 def test_always_on_catalog_checkpoint_skips_unchanged_sessions(
     tmp_path: Path,

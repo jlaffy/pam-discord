@@ -39,6 +39,8 @@ class Config:
     always_on_excluded_roots: tuple[Path, ...] = ()
     always_on_index_sessions_per_directory: int = 10
     always_on_recent_sessions_limit: int = 10
+    always_on_sidebar_sessions_per_forum: int = 3
+    always_on_sidebar_session_max_age_days: int = 7
 
 
 def load_config(path: Path) -> Config:
@@ -101,6 +103,8 @@ def load_config(path: Path) -> Config:
     always_on_excluded_roots: tuple[Path, ...] = ()
     always_on_index_sessions_per_directory = 10
     always_on_recent_sessions_limit = 10
+    always_on_sidebar_sessions_per_forum = 3
+    always_on_sidebar_session_max_age_days = 7
     if isinstance(always_on, dict) and always_on.get("guild_id"):
         always_on_guild_id = int(always_on["guild_id"])
         always_on_state_dir = Path(
@@ -129,6 +133,16 @@ def load_config(path: Path) -> Config:
         )
         if not 1 <= always_on_recent_sessions_limit <= 25:
             raise ValueError("always_on recent_sessions_limit must be 1-25")
+        always_on_sidebar_sessions_per_forum = int(
+            always_on.get("sidebar_sessions_per_forum", 3)
+        )
+        if not 1 <= always_on_sidebar_sessions_per_forum <= 10:
+            raise ValueError("always_on sidebar_sessions_per_forum must be 1-10")
+        always_on_sidebar_session_max_age_days = int(
+            always_on.get("sidebar_session_max_age_days", 7)
+        )
+        if not 1 <= always_on_sidebar_session_max_age_days <= 90:
+            raise ValueError("always_on sidebar_session_max_age_days must be 1-90")
     if not channels and not guilds and always_on_guild_id is None:
         raise ValueError("at least one Discord server or channel mapping is required")
     project_roots: tuple[Path, ...] = ()
@@ -173,4 +187,6 @@ def load_config(path: Path) -> Config:
         always_on_excluded_roots=always_on_excluded_roots,
         always_on_index_sessions_per_directory=always_on_index_sessions_per_directory,
         always_on_recent_sessions_limit=always_on_recent_sessions_limit,
+        always_on_sidebar_sessions_per_forum=always_on_sidebar_sessions_per_forum,
+        always_on_sidebar_session_max_age_days=always_on_sidebar_session_max_age_days,
     )

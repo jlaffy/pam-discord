@@ -43,6 +43,9 @@ Discord server: Pam Lab
 - `#recent-sessions` is a pinned, Pam-maintained dashboard placed at the top of the server. It is
   sorted by Codex `updatedAt` and shows status, project root, relative working directory, token
   total, and a link to each existing Forum post. It never creates duplicate conversations.
+- Pam keeps the authorized user joined to at most three sessions per Forum that were active in
+  the last seven days. These are sidebar shortcuts only; opening the Forum still shows its full
+  post history. Trimming older memberships requires the bot's `Manage Threads` permission.
 
 ## Safety and rollout
 
