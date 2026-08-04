@@ -18,6 +18,8 @@ from pam_discord.bot import (
     _load_polled_sessions,
     _recently_mirrored,
     _remote_project_command,
+    _session_display_title,
+    _session_semantic_title,
 )
 from pam_discord.app_server import load_shared_sessions, save_shared_sessions
 from pam_discord.config import ChannelConfig, Config, load_config
@@ -40,6 +42,21 @@ def _bot(tmp_path: Path) -> PamDiscord:
             codex_app_server_url="ws://127.0.0.1:45832",
         )
     )
+
+
+def test_session_titles_omit_root_and_decorate_subdirectories(tmp_path: Path) -> None:
+    project = tmp_path / "project"
+    subdirectory = project / "results" / "figures"
+
+    assert _session_display_title("[root] Analyze results", project, project) == (
+        "Analyze results"
+    )
+    assert _session_display_title("Analyze results", subdirectory, project) == (
+        "[results/figures] Analyze results"
+    )
+    assert _session_semantic_title(
+        "[results/figures] Analyze results", subdirectory, project
+    ) == "Analyze results"
 
 
 def test_discord_session_is_mapped_before_app_server_turn_starts(
