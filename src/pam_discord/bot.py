@@ -650,6 +650,7 @@ class PamDiscord(discord.Client):
                 )
         sessions.sort(key=lambda item: item[0], reverse=True)
         guild_id = self.config.always_on_guild_id
+        now = datetime.now(UTC).timestamp()
         lines = [
             "**Pam recent sessions**",
             "Newest first by Codex last-active time. Links open the existing Forum posts.",
@@ -659,10 +660,12 @@ class PamDiscord(discord.Client):
             : self.config.always_on_recent_sessions_limit
         ]:
             token_text = _compact_count(tokens) if tokens is not None else "—"
+            created = min(created, now)
+            updated = min(updated, now)
             lines.extend(
                 (
                     f"📁 `{root}` → `{relative}`",
-                    f"age <t:{int(created)}:R> · active <t:{int(updated)}:R> · "
+                    f"started <t:{int(created)}:R> · last active <t:{int(updated)}:R> · "
                     f"**{status}** · {token_text} tokens",
                     f"[{title}](https://discord.com/channels/{guild_id}/{thread_id})",
                     "",
