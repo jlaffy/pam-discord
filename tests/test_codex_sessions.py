@@ -19,7 +19,6 @@ from pam_discord.bot import (
     _recently_mirrored,
     _remote_project_command,
     _session_display_title,
-    _session_semantic_title,
 )
 from pam_discord.app_server import load_shared_sessions, save_shared_sessions
 from pam_discord.config import ChannelConfig, Config, load_config
@@ -54,9 +53,6 @@ def test_session_titles_omit_root_and_decorate_subdirectories(tmp_path: Path) ->
     assert _session_display_title("Analyze results", subdirectory, project) == (
         "[results/figures] Analyze results"
     )
-    assert _session_semantic_title(
-        "[results/figures] Analyze results", subdirectory, project
-    ) == "Analyze results"
 
 
 def test_discord_session_is_mapped_before_app_server_turn_starts(
@@ -407,6 +403,59 @@ def test_discord_started_session_is_relinked_without_duplicate_thread(
         "codex_thread_id"
     ] == "codex-thread"
     assert authorized == [123]
+
+
+def test_native_codex_name_renames_mapped_discord_thread_in_place(
+    tmp_path: Path, monkeypatch
+) -> None:
+    workspace = tmp_path / "project"
+    records = tmp_path / "records"
+    metadata_dir = records / "123"
+    workspace.mkdir()
+    metadata_dir.mkdir(parents=True)
+    (metadata_dir / "metadata.json").write_text(
+        json.dumps({"discord_thread_id": 123, "title": "temporary prompt"}) + "\n"
+    )
+    channel = ChannelConfig(workspace=workspace, project_record_dir=records)
+    bot = _bot(tmp_path)
+    bot.config.guilds[10] = channel
+    save_shared_sessions(workspace, {"codex-thread": 123})
+    edits: list[str] = []
+
+    class DiscordThread:
+        id = 123
+        name = "temporary prompt"
+
+        async def edit(self, *, name: str) -> None:
+            edits.append(name)
+            self.name = name
+
+    thread = DiscordThread()
+    monkeypatch.setattr("pam_discord.bot.discord.Thread", DiscordThread)
+    bot.get_channel = lambda channel_id: thread if channel_id == 123 else None  # type: ignore[method-assign]
+    bot._schedule_directory_index = lambda _channel: None  # type: ignore[method-assign]
+
+    async def forbidden_request(*_args, **_kwargs):
+        raise AssertionError("native name mirroring must not start or rename a Codex thread")
+
+    bot._app_server.request = forbidden_request  # type: ignore[method-assign]
+    asyncio.run(
+        bot._handle_app_server_notification(
+            {
+                "method": "thread/name/updated",
+                "params": {
+                    "threadId": "codex-thread",
+                    "threadName": "Analyze HLA Signal Peptides",
+                },
+            }
+        )
+    )
+
+    assert edits == ["Analyze HLA Signal Peptides"]
+    assert load_shared_sessions(workspace) == {"codex-thread": 123}
+    assert json.loads((metadata_dir / "metadata.json").read_text())["title"] == (
+        "Analyze HLA Signal Peptides"
+    )
 
 
 def test_live_events_disable_compatibility_polling(tmp_path: Path) -> None:

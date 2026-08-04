@@ -10,9 +10,7 @@ import os
 import re
 import shlex
 import shutil
-import subprocess
 import socket
-import tempfile
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -167,19 +165,6 @@ def _session_display_title(title: str, cwd: Path, project_root: Path) -> str:
     if relative == Path("."):
         return cleaned
     return _clean_thread_title(f"[{relative}] {cleaned}")
-
-
-def _session_semantic_title(title: str, cwd: Path, project_root: Path) -> str:
-    """Remove Pam's directory decoration before saving a name in Codex."""
-    displayed = _session_display_title(title, cwd, project_root)
-    try:
-        relative = cwd.resolve().relative_to(project_root.resolve())
-    except ValueError:
-        return _clean_thread_title(title)
-    prefix = f"[{relative}] "
-    if relative != Path(".") and displayed.startswith(prefix):
-        return _clean_thread_title(displayed[len(prefix) :])
-    return displayed
 
 
 def _is_audio(attachment: discord.Attachment) -> bool:
@@ -346,7 +331,6 @@ class PamDiscord(discord.Client):
         self._session_catalog_synced = False
         self._project_setup_task: asyncio.Task[None] | None = None
         self._directory_channel_lock = asyncio.Lock()
-        self._pending_discord_renames: dict[int, str] = {}
         self._linking_codex_threads: set[str] = set()
         self._last_catalog_sync = 0.0
         self._membership_synced_threads: set[int] = set()
@@ -725,29 +709,6 @@ class PamDiscord(discord.Client):
                 mention_author=False,
             )
 
-    async def on_thread_update(
-        self, before: discord.Thread, after: discord.Thread
-    ) -> None:
-        if before.name == after.name:
-            return
-        expected = self._pending_discord_renames.get(after.id)
-        if expected == after.name:
-            self._pending_discord_renames.pop(after.id, None)
-            return
-        codex_thread_id = self._codex_thread_for_discord(after.id)
-        if codex_thread_id is None:
-            return
-        cwd, project_root = self._session_title_context(codex_thread_id, after.id)
-        title = _session_semantic_title(after.name, cwd, project_root)
-        if not title:
-            return
-        try:
-            await self._app_server.request(
-                "thread/name/set", {"threadId": codex_thread_id, "name": title}
-            )
-        except Exception:
-            LOG.exception("failed to rename Codex conversation %s", codex_thread_id)
-
     async def _start_remote_project_setup(
         self,
         message: discord.Message,
@@ -1112,83 +1073,6 @@ class PamDiscord(discord.Client):
         await self._app_server.request("turn/start", turn_params)
         return codex_thread_id
 
-    async def _name_discord_started_session(
-        self,
-        discord_thread: discord.Thread,
-        codex_thread_id: str,
-        prompt: str,
-        workspace: Path,
-        record_dir: Path,
-    ) -> None:
-        """Give a Discord-started session one useful name in both clients."""
-        try:
-            result = await self._app_server.request(
-                "thread/read", {"threadId": codex_thread_id, "includeTurns": False}
-            )
-            value = result.get("thread") if isinstance(result, dict) else None
-            title = (
-                _clean_thread_title(str(value.get("name") or ""))
-                if isinstance(value, dict)
-                else ""
-            )
-            if not title:
-                title = await asyncio.to_thread(
-                    self._generate_thread_title,
-                    prompt,
-                    workspace,
-                    record_dir,
-                )
-            if not title:
-                return
-            await self._app_server.request(
-                "thread/name/set", {"threadId": codex_thread_id, "name": title}
-            )
-            if discord_thread.name != title:
-                await self._edit_discord_thread_name(discord_thread, title)
-        except Exception:
-            LOG.exception("failed to name shared session %s", codex_thread_id)
-
-    def _generate_thread_title(
-        self,
-        prompt: str,
-        workspace: Path,
-        record_dir: Path,
-    ) -> str:
-        title_path = record_dir / "codex-title.txt"
-        instruction = (
-            "Write a concise title for this coding-agent conversation. "
-            "Return only the title, with no quotation marks or punctuation wrapper. "
-            "Use 3 to 8 words and at most 80 characters.\n\n"
-            f"Conversation request:\n{prompt[:6000]}"
-        )
-        command = [
-            self.config.codex_binary,
-            "exec",
-            "--ephemeral",
-            "--sandbox",
-            "read-only",
-            "-C",
-            str(workspace),
-            "-o",
-            str(title_path),
-            "--",
-            instruction,
-        ]
-        result = subprocess.run(
-            command,
-            cwd=workspace,
-            capture_output=True,
-            text=True,
-            timeout=min(self.config.codex_timeout_seconds, 120),
-            check=False,
-            env={key: value for key, value in os.environ.items() if key != "OPENAI_API_KEY"},
-        )
-        if result.returncode != 0:
-            LOG.warning("Codex title generation failed: %s", result.stderr.strip()[-500:])
-            return ""
-        value = title_path.read_text(encoding="utf-8") if title_path.exists() else result.stdout
-        return _clean_thread_title(value)
-
     def _record_project_message(
         self,
         channel_config: ChannelConfig,
@@ -1239,20 +1123,6 @@ class PamDiscord(discord.Client):
                 return codex_thread_id
         return None
 
-    def _codex_thread_for_discord(self, discord_thread_id: int) -> str | None:
-        seen: set[Path] = set()
-        for channel_config in self._all_channel_configs():
-            state = self._session_state_workspace(channel_config)
-            if state in seen:
-                continue
-            seen.add(state)
-            codex_thread_id = self._shared_codex_thread(
-                channel_config, discord_thread_id
-            )
-            if codex_thread_id is not None:
-                return codex_thread_id
-        return None
-
     def _session_title_context(
         self, codex_thread_id: str, discord_thread_id: int
     ) -> tuple[Path, Path]:
@@ -1280,12 +1150,21 @@ class PamDiscord(discord.Client):
         cleaned = _clean_thread_title(title)
         if not cleaned or discord_thread.name == cleaned:
             return
-        self._pending_discord_renames[discord_thread.id] = cleaned
-        try:
-            await discord_thread.edit(name=cleaned)
-        except Exception:
-            self._pending_discord_renames.pop(discord_thread.id, None)
-            raise
+        await discord_thread.edit(name=cleaned)
+
+    def _record_session_title(self, codex_thread_id: str, title: str) -> None:
+        for channel_config in self._all_channel_configs():
+            discord_id = self._load_channel_sessions(channel_config).get(codex_thread_id)
+            records = channel_config.project_record_dir
+            if discord_id is None or records is None:
+                continue
+            metadata_path = records / str(discord_id) / "metadata.json"
+            if metadata_path.exists():
+                metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+                metadata["title"] = title
+                _write_json(metadata_path, metadata)
+            self._schedule_directory_index(channel_config)
+            return
 
     def _workspace_config_for_cwd(self, cwd: Path) -> ChannelConfig | None:
         if self._always_on_excludes(cwd):
@@ -1425,6 +1304,9 @@ class PamDiscord(discord.Client):
                         discord_thread = None
                 if isinstance(discord_thread, discord.Thread):
                     await self._edit_discord_thread_name(discord_thread, title)
+                await asyncio.to_thread(
+                    self._record_session_title, codex_thread_id, title
+                )
             await asyncio.to_thread(
                 self._record_app_server_event, codex_thread_id, event
             )
@@ -1856,15 +1738,6 @@ class PamDiscord(discord.Client):
             )
         await self._import_codex_history(codex_thread_id)
         self._schedule_directory_index(channel_config)
-        if not str(value.get("name") or "").strip() and preview:
-            asyncio.create_task(
-                self._name_terminal_started_session(
-                    discord_thread,
-                    codex_thread_id,
-                    preview,
-                    cwd,
-                )
-            )
 
     async def _originating_discord_thread(
         self, codex_thread_id: str
@@ -1901,36 +1774,6 @@ class PamDiscord(discord.Client):
                 if isinstance(candidate, discord.Thread):
                     return candidate
         return None
-
-    async def _name_terminal_started_session(
-        self,
-        discord_thread: discord.Thread,
-        codex_thread_id: str,
-        preview: str,
-        workspace: Path,
-    ) -> None:
-        try:
-            with tempfile.TemporaryDirectory(prefix="pam-title-") as temporary:
-                title = await asyncio.to_thread(
-                    self._generate_thread_title,
-                    preview,
-                    workspace,
-                    Path(temporary),
-                )
-            if not title:
-                return
-            await self._app_server.request(
-                "thread/name/set", {"threadId": codex_thread_id, "name": title}
-            )
-            channel_config = self._workspace_config_for_cwd(workspace)
-            display_title = _session_display_title(
-                title,
-                workspace,
-                channel_config.workspace if channel_config is not None else workspace,
-            )
-            await self._edit_discord_thread_name(discord_thread, display_title)
-        except Exception:
-            LOG.exception("failed to name terminal-started session %s", codex_thread_id)
 
     async def _ensure_authorized_thread_members(self, discord_thread_id: int) -> None:
         if discord_thread_id in self._membership_synced_threads:

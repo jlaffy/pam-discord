@@ -30,6 +30,9 @@ Discord server: Pam Lab
 - Git roots define projects when available.
 - Otherwise, the first directory beneath an approved root defines the project.
 - A session's relative working directory is shown in its post title and project directory index.
+- Codex's native session name is canonical. Pam mirrors `thread/name/updated` onto the already
+  mapped Discord post and only adds directory decoration; it never generates a competing title
+  or writes Discord title changes back into Codex.
 - Directory indexes are event-driven, debounced, and periodically reconciled from lightweight
   metadata. They never block conversation mirroring.
 - Forums default to latest-activity ordering. Each directory-index section also sorts by latest
