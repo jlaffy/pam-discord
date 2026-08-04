@@ -1518,13 +1518,24 @@ class PamDiscord(discord.Client):
                         str(value.get(key) or "")
                         for key in ("updatedAt", "updated_at", "name", "preview")
                     )
+                    channel_config = self._workspace_config_for_cwd(
+                        Path(str(value.get("cwd") or "")).resolve()
+                    )
+                    if (
+                        channel_config is not None
+                        and channel_config.session_state_dir is not None
+                        and not any(
+                            item is channel_config for item in self.config.channels.values()
+                        )
+                    ):
+                        # Dynamic Forum mappings live in memory. Re-register the
+                        # existing Forum after a Pam restart even when every Codex
+                        # session is unchanged in the catalog checkpoint.
+                        await self._always_on_forum(channel_config)
                     if initialized and checkpoint.get(codex_thread_id) == fingerprint:
                         continue
                     try:
                         await self._link_started_codex_thread(value)
-                        channel_config = self._workspace_config_for_cwd(
-                            Path(str(value.get("cwd") or "")).resolve()
-                        )
                         if (
                             initialized
                             and channel_config is not None
