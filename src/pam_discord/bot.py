@@ -1583,17 +1583,16 @@ class PamDiscord(discord.Client):
                         # existing Forum after a Pam restart even when every Codex
                         # session is unchanged in the catalog checkpoint.
                         await self._always_on_forum(channel_config)
+                        self._schedule_directory_index(channel_config)
+                    if channel_config is not None:
+                        # Reconcile every mapped title on startup, including
+                        # unchanged sessions skipped by the catalog checkpoint.
                         await self._normalize_existing_session_title(
                             value, channel_config
                         )
-                        self._schedule_directory_index(channel_config)
                     if initialized and checkpoint.get(codex_thread_id) == fingerprint:
                         continue
                     try:
-                        if channel_config is not None:
-                            await self._normalize_existing_session_title(
-                                value, channel_config
-                            )
                         await self._link_started_codex_thread(value)
                         if (
                             initialized
