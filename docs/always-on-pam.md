@@ -62,5 +62,29 @@ Discord server: Pam Lab
 - Add manual directory routing and promotion of busy subdirectories to dedicated Forum channels.
 - Import existing project histories into the new index without duplicating Discord messages.
 
+### Hybrid project destinations
+
+Central Forums and dedicated project servers should be supported simultaneously rather than as
+mutually exclusive operating modes. Route through a stable Pam project identity instead of
+coupling a Codex session directly to a physical Discord destination:
+
+```text
+Codex session → Pam project identity → selected Discord destination
+```
+
+- New and smaller projects may default to a Forum in the central Pam server.
+- Substantial, collaborative, or permission-sensitive projects may use dedicated Discord servers.
+- A `pam promote PATH` operation should route a central project to a dedicated server, recreate
+  desired session history from canonical Codex records, continue future syncing there, and leave
+  the old Forum archived or read-only.
+- A `pam consolidate PATH` operation should route a dedicated project back into the central
+  server and optionally reconstruct its history there.
+- Promotion and consolidation create new Discord threads from Codex history; they do not attempt
+  to move Discord thread IDs between servers.
+- Only one destination should actively write to a given Codex session at a time. Historical
+  destinations may remain readable.
+- Configuration should allow per-project destination overrides while preserving automatic
+  discovery for projects without overrides.
+
 Pam must not expose private hidden model reasoning. It may mirror reasoning summaries and tool
 events that Codex explicitly provides through its supported interfaces.
