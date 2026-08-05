@@ -53,7 +53,8 @@ Discord server: Pam Lab
   It never creates duplicate conversations.
 - Pam keeps the authorized user joined to at most three sessions per Forum that were active in
   the last seven days. These are sidebar shortcuts only; opening the Forum still shows its full
-  post history. Trimming older memberships requires the bot's `Manage Threads` permission.
+  post history. Trimming older memberships requires the bot's `Manage Threads` permission; Pam
+  performs a permission preflight and skips all membership calls when it is unavailable.
 
 ## Safety and rollout
 

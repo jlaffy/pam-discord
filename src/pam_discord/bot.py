@@ -722,6 +722,28 @@ class PamDiscord(discord.Client):
         guild = self.get_guild(guild_id) if guild_id is not None else None
         if guild is None:
             return
+        forum = next(
+            (
+                channel
+                for channel_id, item in self.config.channels.items()
+                if item is channel_config
+                and isinstance(
+                    channel := self.get_channel(channel_id), discord.ForumChannel
+                )
+            ),
+            None,
+        )
+        bot_member = guild.me
+        if (
+            isinstance(forum, discord.ForumChannel)
+            and bot_member is not None
+            and not forum.permissions_for(bot_member).manage_threads
+        ):
+            LOG.warning(
+                "skipping sidebar session trimming for %s: Manage Threads is unavailable",
+                channel_config.workspace,
+            )
+            return
         members = []
         for user_id in self.config.allowed_user_ids:
             try:
