@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import asyncio
+from datetime import UTC, datetime
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -485,10 +486,11 @@ def test_native_codex_name_renames_mapped_discord_thread_in_place(
     )
 
     assert len(edits) == 1
-    assert edits[0].endswith("Aug 4 · Analyze HLA Signal Peptides")
+    today = datetime.now(UTC).strftime("%b %-d")
+    assert edits[0].endswith(f"{today} · Analyze HLA Signal Peptides")
     assert load_shared_sessions(workspace) == {"codex-thread": 123}
     assert json.loads((metadata_dir / "metadata.json").read_text())["title"].endswith(
-        "Aug 4 · Analyze HLA Signal Peptides"
+        f"{today} · Analyze HLA Signal Peptides"
     )
 
 
@@ -548,6 +550,12 @@ def test_recent_mirror_content_is_deduplicated_across_different_item_ids() -> No
 def test_discord_instruction_prefers_existing_tools_without_connector_prompts() -> None:
     assert "existing authenticated local command-line tools" in DISCORD_AGENT_INSTRUCTION
     assert "only when" in DISCORD_AGENT_INSTRUCTION
+
+
+def test_discord_instruction_requires_requested_files_as_attachments() -> None:
+    assert "asks to see, show, visualize, or send" in DISCORD_AGENT_INSTRUCTION
+    assert "Markdown link to the actual file" in DISCORD_AGENT_INSTRUCTION
+    assert "Discord attachment" in DISCORD_AGENT_INSTRUCTION
 
 
 def test_connector_approval_defaults_to_decline() -> None:

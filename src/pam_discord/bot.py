@@ -28,7 +28,10 @@ DISCORD_AGENT_INSTRUCTION = (
     "You are running through pam's unattended Discord interface. "
     "Use existing authenticated local command-line tools (for example gh for GitHub) when "
     "available. Request installation or connection of an app, connector, or plugin only when "
-    "there is no suitable authenticated local tool or the user explicitly asks for that connector."
+    "there is no suitable authenticated local tool or the user explicitly asks for that connector. "
+    "When the user asks to see, show, visualize, or send an image or other local file, put the "
+    "file inside the current project and include a Markdown link to the actual file in the final "
+    "response so pam uploads it as a Discord attachment; do not only report its filesystem path."
 )
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
 DELIVERABLE_EXTENSIONS = {

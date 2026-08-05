@@ -110,6 +110,9 @@ pam runs Discord-started Codex work with full local access by default, equivalen
 running pam. Set `codex_full_access = false` in pam's `config.toml` to use Codex's normal sandbox.
 When Codex links to a supported file inside the project, pam uploads it to the conversation thread.
 Files over the Discord server's upload limit stay on the remote machine and pam reports their path.
+Pam's built-in Discord instruction tells Codex to link the actual project file whenever you ask to
+see, show, visualize, or send it, so requested images and other deliverables appear as attachments
+without needing a reminder in every conversation.
 
 If you also want to speak prompts on your Mac, you can optionally enable
 [macOS Dictation](docs/macos-dictation.md).
