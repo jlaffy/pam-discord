@@ -33,6 +33,41 @@ def test_pending_request_is_completed_exactly_once() -> None:
     asyncio.run(exercise())
 
 
+def test_request_timeout_discards_unresponsive_owned_server() -> None:
+    async def exercise() -> None:
+        async def handle(_event: dict[str, object]) -> None:
+            pass
+
+        server = CodexAppServer("stdio://", handle)
+        process = object()
+        server._process = process  # type: ignore[assignment]
+        recovered: list[object] = []
+
+        async def ensure_connected() -> None:
+            pass
+
+        async def request_connected(_method: str, _params: dict[str, object]) -> object:
+            raise asyncio.TimeoutError
+
+        async def recover(value: object) -> None:
+            recovered.append(value)
+
+        server._ensure_connected = ensure_connected  # type: ignore[method-assign]
+        server._request_connected = request_connected  # type: ignore[method-assign]
+        server._recover_unresponsive = recover  # type: ignore[method-assign]
+
+        try:
+            await server.request("thread/list", {})
+        except asyncio.TimeoutError:
+            pass
+        else:
+            raise AssertionError("timeout should reach the caller")
+
+        assert recovered == [process]
+
+    asyncio.run(exercise())
+
+
 def test_real_codex_app_server_handshake_and_broadcast(tmp_path: Path) -> None:
     async def exercise() -> None:
         events: list[dict[str, object]] = []

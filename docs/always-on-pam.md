@@ -15,6 +15,8 @@ is required.
 - Preserve current voice transcription and Codex-to-Discord file delivery.
 - Resume one shared Codex session from either interface.
 - Recover after Pam or Codex restarts without missing or duplicating messages.
+- Treat an app-server request timeout as a broken child, replace the owned child automatically,
+  and fail queued background requests so later live Discord turns use a fresh connection.
 - Keep Codex session data canonical; store only Pam mappings, checkpoints, records, audio, and
   attachments needed for recovery and portable history.
 
@@ -36,6 +38,9 @@ Discord server: Pam Lab
   or writes Discord title changes back into Codex.
 - Directory indexes are event-driven, debounced, and periodically reconciled from lightweight
   metadata. They never block conversation mirroring.
+- Always-on mode relies on live events plus five-second catalog discovery and disables legacy
+  full-history compatibility polling, preventing background history reads from competing with
+  live Discord turns on the app-server connection.
 - Forums default to latest-activity ordering. Each directory-index section also sorts by latest
   activity and shows running/idle state, relative creation and activity times, and best-effort
   token totals. `always_on.index_sessions_per_directory` controls how many recent sessions each

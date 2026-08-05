@@ -1690,7 +1690,9 @@ class PamDiscord(discord.Client):
                 except Exception:
                     LOG.exception("failed to process pam link request %s", path)
             await self._sync_shared_sessions()
-            catalog_interval = 2 if self.config.always_on_guild_id is not None else 60
+            # Live events are immediate. A five-second discovery scan keeps terminal
+            # sessions responsive without continuously pressuring the app-server.
+            catalog_interval = 5 if self.config.always_on_guild_id is not None else 60
             if time.monotonic() - self._last_catalog_sync >= catalog_interval:
                 self._last_catalog_sync = time.monotonic()
                 asyncio.create_task(self._sync_project_session_catalogs())
@@ -1698,6 +1700,11 @@ class PamDiscord(discord.Client):
 
     async def _sync_shared_sessions(self) -> None:
         """Import turns written by Codex clients that predate `pam codex`."""
+        # Always-on discovery already imports changed sessions from thread/list and
+        # receives live app-server events. Compatibility polling performs expensive
+        # includeTurns reads and must not compete with live Discord turns there.
+        if self.config.always_on_guild_id is not None:
+            return
         seen: set[str] = set()
         for channel_config in self._all_channel_configs():
             for codex_thread_id in _load_polled_sessions(

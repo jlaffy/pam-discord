@@ -13,7 +13,9 @@ NotificationHandler = Callable[[dict[str, object]], Awaitable[None]]
 class CodexAppServer:
     """An owned Codex app-server using its supported JSONL stdio transport."""
 
-    def __init__(self, url: str, handler: NotificationHandler) -> None:
+    def __init__(
+        self, url: str, handler: NotificationHandler, *, request_timeout: float = 30
+    ) -> None:
         # Keep url in the API/config for compatibility with existing installations. Pam
         # deliberately owns a stdio server now; websocket listening is experimental and
         # allowed stale, independently-owned processes to outlive Pam.
@@ -29,6 +31,7 @@ class CodexAppServer:
         self._connect_lock = asyncio.Lock()
         self._write_lock = asyncio.Lock()
         self._closing = False
+        self._request_timeout = request_timeout
 
     async def start(self, codex_binary: str) -> None:
         binary = shutil.which(codex_binary)
@@ -116,7 +119,24 @@ class CodexAppServer:
 
     async def request(self, method: str, params: dict[str, object]) -> object:
         await self._ensure_connected()
-        return await self._request_connected(method, params)
+        process = self._process
+        try:
+            return await self._request_connected(method, params)
+        except asyncio.TimeoutError:
+            await self._recover_unresponsive(process)
+            raise
+
+    async def _recover_unresponsive(
+        self, process: asyncio.subprocess.Process | None
+    ) -> None:
+        """Discard a live-looking child that stopped answering JSON-RPC requests."""
+        async with self._connect_lock:
+            if process is None or self._process is not process:
+                return
+            self._fail_pending(
+                ConnectionError("Codex app-server was restarted after a request timeout")
+            )
+            await self._discard_process()
 
     async def _request_connected(self, method: str, params: dict[str, object]) -> object:
         request_id = self._next_id
@@ -125,7 +145,7 @@ class CodexAppServer:
         self._pending[request_id] = future
         try:
             await self._send({"method": method, "id": request_id, "params": params})
-            return await asyncio.wait_for(future, timeout=30)
+            return await asyncio.wait_for(future, timeout=self._request_timeout)
         finally:
             self._pending.pop(request_id, None)
 

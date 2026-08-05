@@ -375,6 +375,28 @@ def test_normal_shared_sessions_are_not_polled(tmp_path: Path) -> None:
     assert imported == []
 
 
+def test_always_on_mode_does_not_run_compatibility_history_polling(
+    tmp_path: Path,
+) -> None:
+    workspace = tmp_path / "project"
+    workspace.mkdir()
+    channel = ChannelConfig(workspace=workspace, project_record_dir=tmp_path / "records")
+    bot = _bot(tmp_path)
+    bot.config.guilds[10] = channel
+    object.__setattr__(bot.config, "always_on_guild_id", 99)
+    save_shared_sessions(workspace, {"codex-thread": 123})
+    _enable_session_polling(workspace, "codex-thread")
+    imported: list[str] = []
+
+    async def import_history(thread_id: str) -> None:
+        imported.append(thread_id)
+
+    bot._import_codex_history = import_history  # type: ignore[method-assign]
+    asyncio.run(bot._sync_shared_sessions())
+
+    assert imported == []
+
+
 def test_discord_started_session_is_relinked_without_duplicate_thread(
     tmp_path: Path, monkeypatch
 ) -> None:
