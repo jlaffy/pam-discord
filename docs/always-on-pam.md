@@ -51,10 +51,10 @@ Discord server: Pam Lab
   token total, and the Codex-native linked title. Future-skewed timestamps are clamped to the
   current time for natural wording.
   It never creates duplicate conversations.
-- Pam keeps the authorized user joined to at most three sessions per Forum that were active in
-  the last seven days. These are sidebar shortcuts only; opening the Forum still shows its full
-  post history. Trimming older memberships requires the bot's `Manage Threads` permission; Pam
-  performs a permission preflight and skips all membership calls when it is unavailable.
+- Sidebar membership trimming is disabled by default (`sidebar_sessions_per_forum = 0`). Discord
+  thread membership is not a scalable navigation mechanism and bulk changes trigger rate limits;
+  `#recent-sessions` is the primary recent-session view. The experimental trimming option remains
+  available for small installations with `Manage Threads` permission.
 
 ## Safety and rollout
 

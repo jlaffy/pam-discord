@@ -278,6 +278,8 @@ def test_always_on_directory_index_groups_sessions_by_relative_cwd(
     assert "Active <t:" in recent
     assert "Idle" in recent
 
+    object.__setattr__(bot.config, "always_on_sidebar_sessions_per_forum", 3)
+
     old = records / "103"
     old.mkdir()
     (old / "metadata.json").write_text(

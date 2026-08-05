@@ -39,7 +39,7 @@ class Config:
     always_on_excluded_roots: tuple[Path, ...] = ()
     always_on_index_sessions_per_directory: int = 10
     always_on_recent_sessions_limit: int = 10
-    always_on_sidebar_sessions_per_forum: int = 3
+    always_on_sidebar_sessions_per_forum: int = 0
     always_on_sidebar_session_max_age_days: int = 7
 
 
@@ -103,7 +103,7 @@ def load_config(path: Path) -> Config:
     always_on_excluded_roots: tuple[Path, ...] = ()
     always_on_index_sessions_per_directory = 10
     always_on_recent_sessions_limit = 10
-    always_on_sidebar_sessions_per_forum = 3
+    always_on_sidebar_sessions_per_forum = 0
     always_on_sidebar_session_max_age_days = 7
     if isinstance(always_on, dict) and always_on.get("guild_id"):
         always_on_guild_id = int(always_on["guild_id"])
@@ -134,10 +134,10 @@ def load_config(path: Path) -> Config:
         if not 1 <= always_on_recent_sessions_limit <= 25:
             raise ValueError("always_on recent_sessions_limit must be 1-25")
         always_on_sidebar_sessions_per_forum = int(
-            always_on.get("sidebar_sessions_per_forum", 3)
+            always_on.get("sidebar_sessions_per_forum", 0)
         )
-        if not 1 <= always_on_sidebar_sessions_per_forum <= 10:
-            raise ValueError("always_on sidebar_sessions_per_forum must be 1-10")
+        if not 0 <= always_on_sidebar_sessions_per_forum <= 10:
+            raise ValueError("always_on sidebar_sessions_per_forum must be 0-10")
         always_on_sidebar_session_max_age_days = int(
             always_on.get("sidebar_session_max_age_days", 7)
         )

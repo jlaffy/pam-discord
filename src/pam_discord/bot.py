@@ -684,6 +684,8 @@ class PamDiscord(discord.Client):
         return "\n".join(lines)[:1950]
 
     def _sidebar_session_ids(self, channel_config: ChannelConfig) -> tuple[int, ...]:
+        if self.config.always_on_sidebar_sessions_per_forum == 0:
+            return ()
         records = channel_config.project_record_dir
         ranked: list[tuple[float, int]] = []
         cutoff = datetime.now(UTC).timestamp() - (
@@ -713,6 +715,8 @@ class PamDiscord(discord.Client):
     async def _reconcile_sidebar_memberships(
         self, channel_config: ChannelConfig
     ) -> None:
+        if self.config.always_on_sidebar_sessions_per_forum == 0:
+            return
         desired = self._sidebar_session_ids(channel_config)
         if self._sidebar_membership_targets.get(channel_config.workspace) == desired:
             return
