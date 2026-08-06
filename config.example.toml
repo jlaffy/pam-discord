@@ -1,4 +1,5 @@
 # Copy to config.toml and replace every example ID/path.
+mode = "central"
 archive_dir = "./archive"
 instance_lock_dir = "./pam-instance.lock"
 allowed_user_ids = [123456789012345678]
@@ -12,23 +13,24 @@ codex_timeout_seconds = 1800
 # Kept for compatibility; pam owns a supported stdio app-server process.
 codex_app_server_url = "stdio://"
 
-# Experimental: automatically mirror Codex sessions beneath these roots into one
+# Default: automatically mirror Codex sessions beneath these roots into one
 # Discord server, using one Forum channel per discovered project.
-# [always_on]
-# guild_id = 456789012345678901
-# approved_roots = ["/absolute/path/to/projects"]
-# excluded_roots = ["/absolute/path/to/projects/already-owned-by-another-pam"]
-# state_dir = "./always-on-state"
+[central]
+guild_id = 456789012345678901
+approved_roots = ["/absolute/path/to/projects"]
+excluded_roots = []
+state_dir = "./central-state"
+index_sessions_per_directory = 10
+recent_sessions_limit = 10
+sidebar_sessions_per_forum = 0
+sidebar_session_max_age_days = 7
 
-[guilds."234567890123456789"]
-workspace = "/absolute/path/to/agent-native-genomics"
-run_codex = true
-instruction_prefix = "Follow this project's instructions. Treat this as formal project work."
-project_record_dir = ".pam/conversations"
+# Advanced mode: set mode = "dedicated", remove [central],
+# and configure one or more [guilds."ID"]/[channels."ID"] mappings.
+# Hybrid mode uses mode = "hybrid" and includes both destination types.
 
-# Optional: override one channel to use a project subdirectory.
-[channels."345678901234567890"]
-workspace = "/absolute/path/to/agent-native-genomics/papers"
-run_codex = true
-instruction_prefix = "Work in the papers area of this project."
-project_record_dir = ".pam/conversations"
+# [guilds."234567890123456789"]
+# workspace = "/absolute/path/to/agent-native-genomics"
+# run_codex = true
+# instruction_prefix = "Follow this project's instructions."
+# project_record_dir = ".pam/conversations"

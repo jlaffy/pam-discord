@@ -29,6 +29,7 @@ class Config:
     codex_binary: str
     codex_timeout_seconds: int
     codex_app_server_url: str
+    mode: str = "dedicated"
     instance_lock_dir: Path | None = None
     codex_full_access: bool = True
     whisper_beam_size: int = 1
@@ -46,6 +47,16 @@ class Config:
 def load_config(path: Path) -> Config:
     with path.open("rb") as handle:
         raw = tomllib.load(handle)
+
+    central = raw.get("central") or raw.get("always_on")
+    explicit_mode = raw.get("mode")
+    if explicit_mode is None:
+        mode = "central" if central else "dedicated"
+    else:
+        mode = str(explicit_mode).strip().lower()
+    mode = {"always_on": "central", "project_servers": "dedicated"}.get(mode, mode)
+    if mode not in {"central", "dedicated", "hybrid"}:
+        raise ValueError("mode must be central, dedicated, or hybrid")
 
     allowed = frozenset(int(value) for value in raw.get("allowed_user_ids", []))
     if not allowed:
@@ -96,7 +107,7 @@ def load_config(path: Path) -> Config:
             project_record_dir=record_dir,
             project_root=workspace,
         )
-    always_on = raw.get("always_on")
+    always_on = central
     always_on_guild_id = None
     always_on_state_dir = None
     always_on_roots: tuple[Path, ...] = ()
@@ -108,17 +119,17 @@ def load_config(path: Path) -> Config:
     if isinstance(always_on, dict) and always_on.get("guild_id"):
         always_on_guild_id = int(always_on["guild_id"])
         always_on_state_dir = Path(
-            str(always_on.get("state_dir", "./always-on-state"))
+            str(always_on.get("state_dir", "./central-state"))
         ).expanduser().resolve()
         roots = always_on.get("approved_roots", [])
         always_on_roots = tuple(
             Path(str(value)).expanduser().resolve() for value in roots
         )
         if not always_on_roots:
-            raise ValueError("always_on approved_roots must contain at least one directory")
+            raise ValueError("central approved_roots must contain at least one directory")
         for root in always_on_roots:
             if not root.is_dir():
-                raise ValueError(f"always_on approved root is not a directory: {root}")
+                raise ValueError(f"central approved root is not a directory: {root}")
         always_on_excluded_roots = tuple(
             Path(str(value)).expanduser().resolve()
             for value in always_on.get("excluded_roots", [])
@@ -127,24 +138,30 @@ def load_config(path: Path) -> Config:
             always_on.get("index_sessions_per_directory", 10)
         )
         if not 1 <= always_on_index_sessions_per_directory <= 50:
-            raise ValueError("always_on index_sessions_per_directory must be 1-50")
+            raise ValueError("central index_sessions_per_directory must be 1-50")
         always_on_recent_sessions_limit = int(
             always_on.get("recent_sessions_limit", 10)
         )
         if not 1 <= always_on_recent_sessions_limit <= 25:
-            raise ValueError("always_on recent_sessions_limit must be 1-25")
+            raise ValueError("central recent_sessions_limit must be 1-25")
         always_on_sidebar_sessions_per_forum = int(
             always_on.get("sidebar_sessions_per_forum", 0)
         )
         if not 0 <= always_on_sidebar_sessions_per_forum <= 10:
-            raise ValueError("always_on sidebar_sessions_per_forum must be 0-10")
+            raise ValueError("central sidebar_sessions_per_forum must be 0-10")
         always_on_sidebar_session_max_age_days = int(
             always_on.get("sidebar_session_max_age_days", 7)
         )
         if not 1 <= always_on_sidebar_session_max_age_days <= 90:
-            raise ValueError("always_on sidebar_session_max_age_days must be 1-90")
+            raise ValueError("central sidebar_session_max_age_days must be 1-90")
     if not channels and not guilds and always_on_guild_id is None:
         raise ValueError("at least one Discord server or channel mapping is required")
+    if mode == "central" and always_on_guild_id is None:
+        raise ValueError("mode central requires a [central] section")
+    if mode == "dedicated" and not channels and not guilds:
+        raise ValueError("mode dedicated requires a server or channel mapping")
+    if mode == "hybrid" and (always_on_guild_id is None or (not channels and not guilds)):
+        raise ValueError("mode hybrid requires [central] and a server or channel mapping")
     project_roots: tuple[Path, ...] = ()
     hub = raw.get("hub")
     if isinstance(hub, dict) and hub.get("projects_root"):
@@ -159,6 +176,7 @@ def load_config(path: Path) -> Config:
         raise ValueError("limits must be 1-100 MB and 1-7200 seconds")
 
     return Config(
+        mode=mode,
         archive_dir=Path(raw.get("archive_dir", "./archive")).expanduser().resolve(),
         allowed_user_ids=allowed,
         channels=channels,

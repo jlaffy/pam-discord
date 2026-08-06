@@ -56,10 +56,9 @@ def main() -> None:
         print(
             "pam connects Discord to Codex sessions on this remote computer.\n\n"
             "Commands:\n"
-            "  pam setup             Save your Discord identity and bot token once\n"
-            "  pam project connect PATH  Connect an existing project\n"
-            "  pam project add PATH  Alias for project connect\n"
-            "  pam project create PATH  Create and connect a new project\n"
+            "  pam setup             Configure the default central Pam server\n"
+            "  pam project connect PATH  Add a dedicated server (advanced mode)\n"
+            "  pam project create PATH  Create a project with a dedicated server\n"
             "  pam codex [OPTIONS]   Start a terminal and Discord shared session\n"
             "  pam resume [OPTIONS]  Resume any project session, including Discord starts\n"
             "  pam link              Link the latest Codex conversation in this directory\n"

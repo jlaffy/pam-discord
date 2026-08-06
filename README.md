@@ -1,32 +1,23 @@
 # pam (personal-agent-manager)
 
-pam turns Discord into a remote interface for Codex on your own computer. Connect a project
-directory once, then start or continue conversations by text or voice, in the terminal or in
-Discord: **project directories** become **Discord servers**, **subdirectories** become **channels**
-(where relevant), and **Codex sessions** become **threads**.
-
-pam also keeps a complete, portable history of your prompts and conversations on your computer, in
-human-readable Markdown and machine-readable JSONL.
-
-[Learn how pam, Discord, Codex, and your project directories fit
-together](docs/how-pam-works.md).
+Pam turns Discord into a remote interface for Codex on your own computer. Approve the directory
+that contains your projects once, then start or continue conversations by text or voice in either
+the terminal or Discord.
 
 ```text
-shared conversations     → start or continue in the terminal or Discord
-complete history         → save prompts and conversations in Markdown and JSONL
-persistent remote access → reach your remote computer and Codex through Discord
-fast voice               → transcribe voice notes using the fastest reliable CPU or GPU mode detected
-file delivery            → receive and easily view generated files in Discord
+approved directory       → projects Pam may discover
+central Pam server       → one Forum channel per project
+Codex session            → one live Forum post
 ```
 
-## Start here
+Pam also keeps portable conversation records on your computer in human-readable Markdown and
+machine-readable JSONL.
 
-> [!NOTE]
-> Steps 1–4 happen once. Repeat Step 5 for every project you connect.
+## Install
 
-### 1. Install
+### 1. Install Pam and authenticate Codex
 
-Open a terminal on the remote computer. Paste:
+On the computer where Codex and your projects live:
 
 ```bash
 git clone https://github.com/jlaffy/pam-discord.git
@@ -35,102 +26,83 @@ cd pam-discord
 codex login
 ```
 
-### 2. Make the Discord bot
+You can give these commands and this README to a Codex agent and ask it to guide the setup. The
+agent can install and verify Pam, but you must personally create the Discord bot, copy its secret
+token, and authorize it in your server.
+
+### 2. Create a Discord bot
 
 - Open the [Discord Developer Portal](https://discord.com/developers/applications) and click
   **New Application**.
 - Name it `pam` and click **Create**.
-- Click **Bot** on the left.
-- Turn on **Message Content Intent**.
-- Under **Token**, click **Reset Token**, then **Copy**. Do not share this token.
+- Open **Bot** and enable **Message Content Intent**.
+- Under **Token**, click **Reset Token**, then **Copy**. Keep this token private.
 
 ### 3. Copy your Discord user ID
 
-- Open Discord and go to **User Settings → Advanced**.
-- Turn on **Developer Mode**.
+- In Discord, open **User Settings → Advanced** and enable **Developer Mode**.
 - Right-click your own name or picture and click **Copy User ID**.
 
-### 4. Finish pam setup
+### 4. Run the guided setup
 
 ```bash
 pam setup
 ```
 
-Paste the Discord user ID and bot token from Steps 2–3. When asked:
+Paste the user ID and bot token when prompted. Choose the parent directory containing the projects
+you want Pam to discover. Follow the displayed links to create one Discord server named `pam` and
+add the bot. Pam writes a private configuration, starts its background service, and discovers
+Codex sessions under the approved directory.
 
-> **Where should pam be allowed to connect or create project directories?**
+### 5. Use Pam
 
-choose the directory containing your projects. pam suggests the parent of the cloned `pam-discord`
-repository. Follow the two links to create a Discord server named `pam` and add the bot.
-
-```text
-general pam server       → general conversations and project management
-project-specific servers → one per project directory for project-specific work
-```
-
-### 5. Connect or create projects
-
-From the general `pam` server—or the terminal—connect an existing project or create a new one:
+Use Codex normally anywhere beneath the approved directory. Sessions appear in the corresponding
+project Forum automatically, normally within five seconds. You can also create a new post in a
+project Forum to start the matching Codex session from Discord.
 
 ```text
-pam project connect /path/to/existing-project
-pam project create /path/to/new-project
+#recent-sessions          → newest sessions across all projects
+project Forum             → complete session list for one project
+Forum post                → one shared Discord/Codex conversation
 ```
 
-Follow the two links; pam detects the new project server and finishes configuration automatically.
-When connecting a project, choose whether Git ignores Pam history or allows
-`.pam/conversations/` text and metadata to be committed. Pam always keeps operational session
-registries, audio, and temporary files local. In existing repositories, setup untracks those
-operational files without deleting the local copies.
+## How it behaves
 
-## Done
+Pam stays running after you disconnect. It mirrors prompts, responses, voice transcripts, tool
+events, names, and activity metadata while keeping Codex session data canonical on disk. Use
+`pam resume` to browse conversations that started in either the terminal or Discord.
 
-```text
-project directory                 ↔ Discord server
-project subdirectory              ↔ Discord channel
-Codex session in that directory   ↔ Discord thread in the corresponding channel
-conversation                      = the same linked history viewed through either interface
-```
+Discord-started Codex work has full local access by default, equivalent to `codex --yolo`. It has
+the same filesystem, network, and account permissions as the Unix user running Pam. Set
+`codex_full_access = false` in Pam's private `config.toml` to use Codex's normal sandbox.
 
-We use *conversation* as the general term for what appears as a Codex session in the terminal and a
-Discord thread in Discord.
+When Codex links to a supported project file, Pam uploads it to the Discord conversation. Pam's
+built-in Discord instruction makes requested images and other deliverables appear as attachments
+without requiring a reminder in every conversation. Files above the Discord server's upload limit
+remain on the computer and Pam reports their path.
 
-Use Codex normally inside a connected project. pam automatically mirrors active conversations into
-Discord, using `#general` for the project root and creating channels for subdirectories when needed.
-Use `pam resume` to browse conversations that started in either the terminal or Discord.
+## Deployment modes
 
-pam stays running after you disconnect. It saves a complete, portable record of your work with
-Codex on your own computer—human-readable in Markdown and machine-readable in JSONL—including
-prompts, responses, voice transcripts, and agent events. Project history lives in
-`<project>/.pam/conversations/`; during setup, “track Pam history” means tracking only conversation
-text and metadata.
+Fresh installations use `mode = "central"`: one Pam server automatically discovers projects under
+approved roots. `mode = "dedicated"` gives selected projects their own servers. `mode = "hybrid"`
+supports configurations containing both a central
+destination and selected dedicated project servers. Codex history remains canonical on disk, so
+changing destinations later does not require physically moving old Discord threads.
 
-pam runs Discord-started Codex work with full local access by default, equivalent to
-`codex --yolo`. It has the same filesystem, network, and account permissions as the Unix user
-running pam. Set `codex_full_access = false` in pam's `config.toml` to use Codex's normal sandbox.
-When Codex links to a supported file inside the project, pam uploads it to the conversation thread.
-Files over the Discord server's upload limit stay on the remote machine and pam reports their path.
-Pam's built-in Discord instruction tells Codex to link the actual project file whenever you ask to
-see, show, visualize, or send it, so requested images and other deliverables appear as attachments
-without needing a reminder in every conversation.
-
-If you also want to speak prompts on your Mac, you can optionally enable
-[macOS Dictation](docs/macos-dictation.md).
-
-Questions, feedback, or ideas? Join the
-[pam discussions](https://github.com/jlaffy/pam-discord/discussions).
-
-See [recommended optional setup](docs/recommended-setup.md) for local developer tools, Codex
-permissions, and macOS Dictation.
+See [the central-server design and future hybrid routing](docs/always-on-pam.md) and
+[recommended optional setup](docs/recommended-setup.md).
 
 ## Help
 
 ```bash
-pam doctor            # check Discord, Codex, and project setup
-pam resume            # browse every conversation for the current project
-pam service status    # check whether pam is running
+pam doctor            # check configuration, Discord, and Codex
+pam resume            # browse conversations for the current project
+pam service status    # check whether Pam is running
 pam service logs      # show recent activity and errors
-pam service restart   # restart pam
+pam service restart   # restart Pam
 ```
+
+Questions, feedback, or ideas? Use
+[GitHub Discussions](https://github.com/jlaffy/pam-discord/discussions).
 
 MIT licensed.

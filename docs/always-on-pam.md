@@ -1,4 +1,4 @@
-# Always-on Pam experiment
+# Central Pam
 
 ## Goal
 
@@ -20,10 +20,10 @@ is required.
 - Keep Codex session data canonical; store only Pam mappings, checkpoints, records, audio, and
   attachments needed for recovery and portable history.
 
-## Experimental organization
+## Default organization
 
 ```text
-Discord server: Pam Lab
+Discord server: Pam
   Text channel: #recent-sessions cross-project Codex recency dashboard
   Forum channel: one per discovered project
     Forum post/thread: one per Codex session
@@ -38,12 +38,12 @@ Discord server: Pam Lab
   or writes Discord title changes back into Codex.
 - Directory indexes are event-driven, debounced, and periodically reconciled from lightweight
   metadata. They never block conversation mirroring.
-- Always-on mode relies on live events plus five-second catalog discovery and disables legacy
+- Central mode relies on live events plus five-second catalog discovery and disables legacy
   full-history compatibility polling, preventing background history reads from competing with
   live Discord turns on the app-server connection.
 - Forums default to latest-activity ordering. Each directory-index section also sorts by latest
   activity and shows running/idle state, relative creation and activity times, and best-effort
-  token totals. `always_on.index_sessions_per_directory` controls how many recent sessions each
+  token totals. `central.index_sessions_per_directory` controls how many recent sessions each
   section displays; older Forum posts remain searchable and are not deleted.
 - `#recent-sessions` is a pinned, Pam-maintained dashboard placed at the top of the server. It is
   sorted by Codex `updatedAt`. Each entry uses a consistent plain-text layout led by its full
@@ -56,13 +56,13 @@ Discord server: Pam Lab
   `#recent-sessions` is the primary recent-session view. The experimental trimming option remains
   available for small installations with `Manage Threads` permission.
 
-## Safety and rollout
+## Development and rollout history
 
-- Develop on `experiment/always-on-pam` in an isolated worktree.
-- Run with a separate `pam-lab` Discord bot, `Pam Lab` server, config, state directory, and test
-  project.
-- Do not modify or stop the live `main` Pam service during canary development.
-- Keep existing Pam and Codex history unchanged and importable.
+- The initial implementation was developed on an isolated branch and exercised with a separate
+  Pam Lab bot, server, configuration, and state directory before becoming the default.
+- Existing project-server configurations remain loadable without adding a `mode` key; they infer
+  `dedicated` for backward compatibility.
+- Existing Pam and Codex history remains unchanged and importable.
 
 ## Later iterations
 

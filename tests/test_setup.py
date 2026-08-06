@@ -68,6 +68,7 @@ def test_setup_creates_private_single_project_configuration(
     )
 
     config = load_config(state_dir / "config.toml")
+    assert config.mode == "dedicated"
     assert config.allowed_user_ids == frozenset({111})
     assert config.channels[222].workspace == workspace
     assert config.channels[222].run_codex is True
@@ -429,6 +430,10 @@ def test_hub_create_uses_private_workspace_and_approved_project_root(
     )
 
     config = load_config(state_dir / "config.toml")
-    assert config.guilds[333].workspace == state_dir / "hub"
+    assert config.mode == "central"
+    assert config.always_on_guild_id == 333
+    assert config.always_on_state_dir == state_dir / "central"
+    assert config.guilds == {}
+    assert config.channels == {}
     assert config.project_roots == (projects_root,)
     assert (state_dir / "hub").is_dir()
