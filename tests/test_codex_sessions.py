@@ -582,6 +582,48 @@ def test_discord_instruction_requires_requested_files_as_attachments() -> None:
     assert "Discord attachment" in DISCORD_AGENT_INSTRUCTION
 
 
+def test_discord_instruction_protects_long_running_jobs_from_turn_interruptions() -> None:
+    assert "queues follow-up messages" in DISCORD_AGENT_INSTRUCTION
+    assert "persistent background job" in DISCORD_AGENT_INSTRUCTION
+    assert "PID, log, status, and outputs" in DISCORD_AGENT_INSTRUCTION
+
+
+def test_same_session_turns_wait_for_completion(tmp_path: Path) -> None:
+    bot = _bot(tmp_path)
+    lifecycle: list[str] = []
+
+    async def exercise() -> None:
+        await bot._reserve_turn("thread-1")
+
+        async def second_turn() -> None:
+            lifecycle.append("waiting")
+            await bot._reserve_turn("thread-1")
+            lifecycle.append("started")
+
+        task = asyncio.create_task(second_turn())
+        await asyncio.sleep(0)
+        assert lifecycle == ["waiting"]
+        bot._release_turn("thread-1")
+        await task
+        assert lifecycle == ["waiting", "started"]
+        bot._release_turn("thread-1")
+
+    asyncio.run(exercise())
+
+
+def test_different_session_turns_remain_concurrent(tmp_path: Path) -> None:
+    bot = _bot(tmp_path)
+
+    async def exercise() -> None:
+        await bot._reserve_turn("thread-1")
+        await bot._reserve_turn("thread-2")
+        assert set(bot._active_turns) == {"thread-1", "thread-2"}
+        bot._release_turn("thread-1")
+        bot._release_turn("thread-2")
+
+    asyncio.run(exercise())
+
+
 def test_connector_approval_defaults_to_decline() -> None:
     view = ConnectorApprovalView(frozenset({1}))
     assert view.action == "decline"

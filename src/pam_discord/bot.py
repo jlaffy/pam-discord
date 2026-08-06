@@ -31,7 +31,11 @@ DISCORD_AGENT_INSTRUCTION = (
     "there is no suitable authenticated local tool or the user explicitly asks for that connector. "
     "When the user asks to see, show, visualize, or send an image or other local file, put the "
     "file inside the current project and include a Markdown link to the actual file in the final "
-    "response so pam uploads it as a Discord attachment; do not only report its filesystem path."
+    "response so pam uploads it as a Discord attachment; do not only report its filesystem path. "
+    "Pam queues follow-up messages in the same Discord conversation until its active Codex turn "
+    "finishes. For computations that must outlive an interactive turn or Pam restart, launch an "
+    "explicitly managed persistent background job, write its PID, log, status, and outputs inside "
+    "the current project, and report how to monitor or cancel it. Keep short commands foreground."
 )
 AUDIO_EXTENSIONS = {".aac", ".flac", ".m4a", ".mp3", ".ogg", ".opus", ".wav", ".webm"}
 DELIVERABLE_EXTENSIONS = {
@@ -374,6 +378,7 @@ class PamDiscord(discord.Client):
         self._membership_synced_threads: set[int] = set()
         self._title_synced_threads: dict[int, str] = {}
         self._turn_typing: dict[str, object] = {}
+        self._active_turns: dict[str, asyncio.Event] = {}
         self._always_on_projects: dict[Path, ChannelConfig] = {}
         self._always_on_lock = asyncio.Lock()
         self._index_update_tasks: dict[Path, asyncio.Task[None]] = {}
@@ -395,6 +400,9 @@ class PamDiscord(discord.Client):
             *(self._stop_turn_typing(thread_id) for thread_id in tuple(self._turn_typing)),
             return_exceptions=True,
         )
+        for event in self._active_turns.values():
+            event.set()
+        self._active_turns.clear()
         for task in self._index_update_tasks.values():
             task.cancel()
         if self._recent_sessions_task is not None:
@@ -1248,23 +1256,28 @@ class PamDiscord(discord.Client):
 
             shared_thread_id = self._shared_codex_thread(channel_config, thread.id)
             if shared_thread_id is not None:
-                await self._app_server.request(
-                    "thread/resume", {"threadId": shared_thread_id}
-                )
-                await self._app_server.request(
-                    "turn/start",
-                    {
-                        "threadId": shared_thread_id,
-                        "input": [{"type": "text", "text": agent_prompt}],
-                        "clientUserMessageId": f"discord:{message.id}",
-                        "approvalPolicy": "never",
-                        "sandboxPolicy": (
-                            {"type": "dangerFullAccess"}
-                            if self.config.codex_full_access
-                            else None
-                        ),
-                    },
-                )
+                await self._reserve_turn(shared_thread_id)
+                try:
+                    await self._app_server.request(
+                        "thread/resume", {"threadId": shared_thread_id}
+                    )
+                    await self._app_server.request(
+                        "turn/start",
+                        {
+                            "threadId": shared_thread_id,
+                            "input": [{"type": "text", "text": agent_prompt}],
+                            "clientUserMessageId": f"discord:{message.id}",
+                            "approvalPolicy": "never",
+                            "sandboxPolicy": (
+                                {"type": "dangerFullAccess"}
+                                if self.config.codex_full_access
+                                else None
+                            ),
+                        },
+                    )
+                except Exception:
+                    self._release_turn(shared_thread_id)
+                    raise
                 return
 
             if channel_config.run_codex:
@@ -1343,8 +1356,34 @@ class PamDiscord(discord.Client):
         }
         if self.config.codex_full_access:
             turn_params["sandboxPolicy"] = {"type": "dangerFullAccess"}
-        await self._app_server.request("turn/start", turn_params)
+        await self._reserve_turn(codex_thread_id)
+        try:
+            await self._app_server.request("turn/start", turn_params)
+        except Exception:
+            self._release_turn(codex_thread_id)
+            raise
         return codex_thread_id
+
+    async def _reserve_turn(self, codex_thread_id: str) -> None:
+        """Wait for and atomically reserve one active turn slot for a Codex session."""
+        while True:
+            active = self._active_turns.get(codex_thread_id)
+            if active is None:
+                self._active_turns[codex_thread_id] = asyncio.Event()
+                return
+            try:
+                await asyncio.wait_for(
+                    active.wait(), timeout=self.config.codex_timeout_seconds
+                )
+            except asyncio.TimeoutError:
+                if self._active_turns.get(codex_thread_id) is active:
+                    self._active_turns.pop(codex_thread_id, None)
+                    active.set()
+
+    def _release_turn(self, codex_thread_id: str) -> None:
+        active = self._active_turns.pop(codex_thread_id, None)
+        if active is not None:
+            active.set()
 
     def _record_project_message(
         self,
@@ -1521,7 +1560,9 @@ class PamDiscord(discord.Client):
                 await self._app_server.respond(request_id, {"action": action})
             return
         if method == "turn/started":
-            await self._start_turn_typing(str(params.get("threadId") or ""))
+            codex_thread_id = str(params.get("threadId") or "")
+            self._active_turns.setdefault(codex_thread_id, asyncio.Event())
+            await self._start_turn_typing(codex_thread_id)
             await asyncio.to_thread(
                 self._record_app_server_event,
                 str(params.get("threadId") or ""),
@@ -1529,6 +1570,7 @@ class PamDiscord(discord.Client):
             )
         elif method in {"turn/completed", "turn/failed", "turn/cancelled"}:
             codex_thread_id = str(params.get("threadId") or "")
+            self._release_turn(codex_thread_id)
             await self._stop_turn_typing(codex_thread_id)
             await asyncio.to_thread(
                 self._record_app_server_event, codex_thread_id, event
